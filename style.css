@@ -1,0 +1,70 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: system-ui, -apple-system, sans-serif; background: #111; color: #333; }
+
+#map { position: absolute; inset: 0; z-index: 1; }
+
+/* Desktop Elements */
+.desktop-only { display: flex; }
+.mobile-only { display: none; }
+
+/* Header & Sidebar (Desktop Original) */
+header.top { position: absolute; top: 12px; left: 12px; right: 12px; height: 50px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); border-radius: 12px; z-index: 1000; padding: 0 16px; align-items: center; justify-content: space-between; box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
+.logo { font-size: 16px; display: flex; align-items: center; gap: 6px; }
+.logo small { font-size: 9px; background: #111; color: #fff; padding: 2px 6px; border-radius: 4px; }
+.roombar { display: flex; gap: 8px; align-items: center; }
+.roombar input { padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; width: 130px; }
+button { cursor: pointer; border: none; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 600; background: #eee; transition: .15s; }
+button.primary { background: #111; color: #fff; }
+button.primary:hover { background: #333; }
+button.danger { background: #ef4444; color: #fff; }
+.account { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+
+aside.sidebar { position: absolute; top: 72px; left: 12px; bottom: 12px; width: 280px; background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); border-radius: 12px; z-index: 1000; box-shadow: 0 4px 15px rgba(0,0,0,0.15); transition: width .25s, transform .25s; flex-direction: column; padding: 16px; }
+aside.sidebar.collapsed { transform: translateX(-235px); }
+.sidebarToggle { position: absolute; right: -14px; top: 16px; width: 28px; height: 28px; border-radius: 50%; background: #111; color: #fff; z-index: 1001; }
+
+.sidebar-body { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; height: 100%; }
+.search-box { display: flex; align-items: center; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 4px 8px; }
+.search-box input { border: none; outline: none; width: 100%; padding: 4px; font-size: 13px; }
+.summary { font-size: 14px; text-align: center; margin: 4px 0; }
+.item { text-align: left; width: 100%; padding: 10px; border-radius: 8px; background: #f5f5f5; margin-bottom: 2px; }
+.item.active { background: #0a7d3c; color: #fff; }
+
+/* Modals & Overlays */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); z-index: 2000; display: flex; align-items: center; justify-content: center; }
+.overlay.hidden { display: none; }
+.card { background: #fff; border-radius: 16px; padding: 20px; width: 90%; max-width: 420px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); display: flex; flex-direction: column; gap: 12px; }
+.cardhead { display: flex; justify-content: space-between; align-items: center; }
+.cardhead h2 { margin: 0; font-size: 18px; }
+.card label { font-size: 12px; font-weight: bold; color: #555; display: flex; flex-direction: column; gap: 4px; }
+.card input, .card textarea { padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-family: inherit; }
+.actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+
+/* Floating Notice Toast */
+#toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px); background: #111; color: #fff; padding: 10px 20px; border-radius: 99px; font-size: 13px; z-index: 3000; transition: transform .3s; box-shadow: 0 6px 20px rgba(0,0,0,0.3); opacity: 0; pointer-events: none; }
+#toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+.locateBtn { position: absolute; bottom: 20px; right: 20px; width: 44px; height: 44px; border-radius: 50%; background: #fff; font-size: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 1000; }
+
+.pin-nav-link { display: inline-block; margin-top: 6px; padding: 4px 8px; background: #4285F4; color: #fff !important; text-decoration: none; border-radius: 4px; font-size: 12px; font-weight: bold; }
+
+/* 📱 MOBILE RESPONSIVE DESIGN (แนวทาง 3 - ปุ่มลอยจิ๋ว โล่งที่สุด) */
+@media (max-width: 768px) {
+  .desktop-only { display: none !important; }
+  .mobile-only { display: flex !important; }
+
+  /* Floating Search Top */
+  .m-search-float { position: absolute; top: 16px; left: 16px; right: 16px; height: 46px; background: rgba(255,255,255,0.92); backdrop-filter: blur(12px); border-radius: 99px; box-shadow: 0 6px 20px rgba(0,0,0,0.2); z-index: 1200; display: flex; align-items: center; padding: 0 16px; gap: 10px; }
+  .m-search-float input { border: none; outline: none; background: transparent; width: 100%; font-size: 14px; }
+
+  /* Right Stack Floating Action Buttons */
+  .m-fab-stack { position: absolute; right: 16px; bottom: 80px; display: flex; flex-direction: column; gap: 10px; z-index: 1200; }
+  .m-fab { width: 48px; height: 48px; border-radius: 50%; background: #fff; color: #111; font-size: 20px; box-shadow: 0 6px 18px rgba(0,0,0,0.25); display: flex; align-items: center; justify-content: center; border: none; }
+  .m-fab.active { background: #0a7d3c; color: #fff; }
+  .m-fab.primary { background: #111; color: #fff; font-size: 24px; }
+
+  /* Bottom Minimal Status Bar */
+  .m-bottom-bar { position: absolute; left: 16px; right: 16px; bottom: 16px; height: 48px; background: rgba(255,255,255,0.92); backdrop-filter: blur(12px); border-radius: 24px; box-shadow: 0 6px 20px rgba(0,0,0,0.2); z-index: 1200; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; }
+  .m-user-info { font-size: 12px; font-weight: 700; color: #444; }
+  .m-menu-pill { background: #f0f0f0; border-radius: 12px; padding: 6px 12px; font-size: 12px; }
+}
