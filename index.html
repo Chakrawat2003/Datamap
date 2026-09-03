@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PinMap — Realtime Shared Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="map"></div>
+
+<!-- DESKTOP HEADER -->
+<header class="top desktop-only">
+  <div class="logo">📍 <b>PinMap</b><small>REALTIME</small></div>
+  <div class="roombar">
+    <input id="room" placeholder="ชื่อห้อง" autocomplete="off" name="pinmap_room">
+    <input id="passcode" type="password" placeholder="รหัสห้อง (ครั้งแรก)" autocomplete="off">
+    <button id="join" class="primary">เข้าห้อง</button>
+    <button id="saveRoom">☆ บันทึกห้อง</button>
+    <button id="share">↗ แชร์</button>
+  </div>
+  <div class="account">
+    <span id="userLabel">ยังไม่ได้เข้าสู่ระบบ</span>
+    <button id="profileBtn">โปรไฟล์</button>
+    <button id="logoutBtn" class="dangerBtn">ออก</button>
+  </div>
+  <div class="online"><i id="onlineDot"></i><span id="onlineCount">0</span> ออนไลน์</div>
+</header>
+
+<!-- DESKTOP SIDEBAR -->
+<aside class="sidebar desktop-only" id="sidebar">
+  <button id="sidebarToggle" class="sidebarToggle" title="พับ/ขยายเมนู">◀</button>
+  <div class="sidebar-body" id="sidebarBody">
+    <button id="add" class="big primary">＋ ปักจุดใหม่</button>
+    <div class="search-box">
+      <span>⌕</span>
+      <input id="search" placeholder="ค้นหาชื่อจุด..." autocomplete="off">
+      <button id="searchBtn" class="searchBtn" title="ค้นหา" type="button">ค้นหา</button>
+    </div>
+    <div class="summary"><strong id="pinCount">0</strong><span>จุด</span></div>
+    <button id="dolToggle" class="item dolItem">🗺️ แปลงที่ดิน (DOL)</button>
+    <button id="locate" class="item">◎ ตำแหน่งฉัน</button>
+    <button id="exportXlsx" class="item">⬇ Export Excel</button>
+    <button id="tableToggle" class="item">☰ ตารางจุดทั้งหมด</button>
+    <button id="s11Toggle" class="item s11Item">🏪 ร้าน 7-Eleven <span id="s11Count" class="s11Count"></span></button>
+    <button id="s11Add" class="item">➕ เพิ่มจุด 7-Eleven</button>
+    <div class="savedTitle">ห้องที่บันทึกไว้</div>
+    <div id="savedRooms" class="savedRooms"></div>
+  </div>
+</aside>
+
+<!-- MOBILE FLOATING UI (แนวทาง 3: ปุ่มลอยจิ๋ว โล่งที่สุด) -->
+<div class="mobile-ui mobile-only">
+  <div class="m-search-float" id="mSearchFloat">
+    <span>🔍</span>
+    <input id="mSearchInput" placeholder="ค้นหาจุด / 7-Eleven...">
+  </div>
+  
+  <div class="m-fab-stack">
+    <button id="mS11Btn" class="m-fab active" title="เปิด/ปิด 7-Eleven">🏪</button>
+    <button id="mLocateBtn" class="m-fab" title="ตำแหน่งของฉัน">◎</button>
+    <button id="mQuickTable" class="m-fab" title="ตารางจุดทั้งหมด">☰</button>
+  </div>
+
+  <div class="m-bottom-bar">
+    <span class="m-user-info" id="mUserInfo">👤 ผู้ใช้ · ห้อง: -</span>
+    <div class="m-bottom-actions">
+      <button id="mAddBtn" class="m-add-pill" title="ปักจุดใหม่">＋ ปักจุด</button>
+      <button id="mMenuBtn" class="m-menu-pill" title="เมนู">☰</button>
+    </div>
+  </div>
+</div>
+
+<!-- MOBILE MENU DRAWER -->
+<div id="mobileMenu" class="mobileMenu hidden mobile-only">
+  <div class="mobileMenuHead"><b>📍 PinMap</b><button id="mobileMenuClose" type="button" aria-label="ปิดเมนู">×</button></div>
+  <div class="mobileMenuBody">
+    <label>ชื่อห้อง<input id="mRoom" placeholder="ชื่อห้อง" autocomplete="off"></label>
+    <label>รหัสห้อง (ครั้งแรก)<input id="mPasscode" type="password" placeholder="รหัสห้อง" autocomplete="off"></label>
+    <button id="mJoin" class="big primary">เข้าห้อง</button>
+    <div class="mobileMenuRow">
+      <button id="mSaveRoom" class="item">☆ บันทึกห้อง</button>
+      <button id="mShare" class="item">↗ แชร์</button>
+    </div>
+    <button id="mExportXlsx" class="item">⬇ Export Excel</button>
+    <button id="mTableToggle" class="item">☰ ตารางจุดทั้งหมด</button>
+    <button id="mDolBtn" class="item">🗺️ แปลงที่ดิน (DOL)</button>
+    <div class="mobileMenuRow">
+      <button id="mProfileBtn" class="item">โปรไฟล์</button>
+      <button id="mLogoutBtn" class="item dangerBtn">ออกจากระบบ</button>
+    </div>
+    <div class="savedTitle">ห้องที่บันทึกไว้</div>
+    <div id="mSavedRooms" class="savedRooms"></div>
+  </div>
+</div>
+
+<div id="tablePanel" class="tablePanel hidden">
+  <div class="tableHead"><span>ตารางจุดในห้อง</span><button id="tableClose" type="button" aria-label="ปิดตาราง">×</button></div>
+  <div id="tableBody" class="tableScroll"></div>
+</div>
+
+<button id="locateBtn" class="locateBtn desktop-only" title="ไปยังตำแหน่งปัจจุบัน">◎</button>
+
+<div id="mode" class="mode hidden">
+  <span id="modeText">📍 คลิกตำแหน่งบนแผนที่เพื่อปักจุด</span> 
+  <button id="cancelMode">ยกเลิก</button>
+</div>
+
+<!-- PIN MODAL -->
+<div id="modal" class="overlay hidden"><div class="card">
+  <div class="cardhead"><h2 id="modalTitle">เพิ่มจุด</h2><button id="close" type="button" aria-label="ปิดหน้าต่าง">×</button></div>
+  <label>ชื่อจุด<input id="title" maxlength="120" placeholder="เช่น บ้าน A"></label>
+  <label>ที่อยู่<input id="address" maxlength="500" placeholder="ที่อยู่ (ใส่เองได้)"></label>
+  <label>รายละเอียด<textarea id="note" maxlength="1000" placeholder="รายละเอียดเพิ่มเติม"></textarea></label>
+  <label>สีหมุด
+    <div id="colorSwatches" class="swatches"><input type="color" id="colorCustom" title="เลือกสีเอง"></div>
+    <input type="hidden" id="color" value="#ef4444">
+  </label>
+  <label>รูปแบบหมุด
+    <div class="iconRow">
+      <button type="button" class="iconBtn active" data-icon="pin">📍</button>
+      <button type="button" class="iconBtn" data-icon="star">⭐</button>
+      <button type="button" class="iconBtn" data-icon="heart">❤️</button>
+      <button type="button" class="iconBtn" data-icon="flag">🚩</button>
+      <button type="button" class="iconBtn" data-icon="home">🏠</button>
+      <button type="button" class="iconBtn" data-icon="food">🍜</button>
+      <button type="button" class="iconBtn" data-icon="shop">🏪</button>
+      <button type="button" class="iconBtn" data-icon="hotel">🏨</button>
+      <button type="button" class="iconBtn" data-icon="photo">📷</button>
+    </div>
+    <div id="imgUploadWrap" class="hidden"><input type="file" id="imgUpload" accept="image/*"><small>ใช้รูปภาพเป็นตัวหมุด (ย่ออัตโนมัติ)</small></div>
+    <input type="hidden" id="icon" value="pin"><input type="hidden" id="iconImg" value="">
+  </label>
+  <div id="coord" class="coord"></div>
+  <div class="actions">
+    <button id="delete" class="danger hidden">ลบจุด</button><span></span>
+    <button id="cancel">ยกเลิก</button><button id="save" class="primary">บันทึก</button>
+  </div>
+</div></div>
+
+<!-- 7-ELEVEN MODAL -->
+<div id="s11Modal" class="overlay hidden"><div class="card">
+  <div class="cardhead"><h2 id="s11ModalTitle">เพิ่มจุด 7-Eleven</h2><button id="s11Close" type="button" aria-label="ปิดหน้าต่าง">×</button></div>
+  <label>ชื่อสาขา<input id="s11Title" maxlength="120" placeholder="เช่น เซเว่นอีเลฟเว่น สาขา..."></label>
+  <label>ที่อยู่<input id="s11Address" maxlength="500" placeholder="ที่อยู่ (ใส่เองได้)"></label>
+  <label>คำอธิบายเพิ่มเติม<textarea id="s11Note" maxlength="1000" placeholder="รายละเอียดเพิ่มเติม"></textarea></label>
+  <label>สีโลโก้
+    <div id="s11Colors" class="swatches s11Swatches"></div>
+    <input type="hidden" id="s11Color" value="default">
+  </label>
+  <div id="s11Coord" class="coord"></div>
+  <div class="actions">
+    <button id="s11Delete" class="danger hidden">ลบจุด</button><span></span>
+    <button id="s11Cancel">ยกเลิก</button><button id="s11Save" class="primary">บันทึก</button>
+  </div>
+</div></div>
+
+<!-- AUTH MODAL -->
+<div id="authModal" class="overlay hidden"><div class="card authCard">
+  <div class="cardhead"><h2 id="authTitle">เข้าสู่ระบบ</h2><button id="authClose" type="button" aria-label="ปิดหน้าต่าง">×</button></div>
+  <p id="authHint" class="muted">ต้องเข้าสู่ระบบก่อนใช้งานแผนที่</p>
+  <label>อีเมล<input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com"></label>
+  <label>รหัสผ่าน<input id="authPassword" type="password" autocomplete="current-password" placeholder="อย่างน้อย 6 ตัวอักษร"></label>
+  <label id="usernameWrap">ชื่อผู้ใช้<input id="authUsername" maxlength="60" placeholder="ชื่อที่จะแสดงบนหมุดและตาราง"></label>
+  <div class="authActions">
+    <button id="authSubmit" class="primary">เข้าสู่ระบบ</button>
+    <button id="authSwitch">สร้างบัญชี</button>
+  </div>
+  <div id="authMessage" class="authMessage"></div>
+</div></div>
+
+<!-- PROFILE MODAL -->
+<div id="profileModal" class="overlay hidden"><div class="card">
+  <div class="cardhead"><h2>โปรไฟล์</h2><button id="profileClose" type="button" aria-label="ปิดหน้าต่าง">×</button></div>
+  <div class="muted" id="profileEmail"></div>
+  <label>ชื่อผู้ใช้<input id="profileUsername" maxlength="60" placeholder="ชื่อที่จะแสดง"></label>
+  <button id="profileSave" class="primary big">บันทึกชื่อผู้ใช้</button>
+</div></div>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="seven11-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
