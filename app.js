@@ -1473,7 +1473,8 @@ const PIN_LOGOS = {
   lawson108: "logo-lawson108.png",
   van: "van.webp",
   m1: "m1.png",
-  x: "x.jpg"
+  x: "x.jpg",
+  deal: "deal.png"
 };
 
 function pinIcon(color, icon, iconImg) {
@@ -1494,7 +1495,7 @@ function marker(p) {
   const gmapUrl = `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
   const canEdit = !!S.session;
   m.bindPopup(`<div class="pin-title">${esc(p.title)}</div>
-    <div>${esc(p.address || "")}</div>
+    ${p.area ? `<div><strong>Area:</strong> ${esc(p.area)}</div>` : ""}
     <div class="pin-note">${esc(p.note || "")}</div>
     <div class="pin-meta">ปักโดย ${esc(p.created_by || "ผู้ใช้")}</div>
     <a href="${gmapUrl}" target="_blank" rel="noopener" class="pin-nav-link">🧭 นำทาง (Google Maps)</a>
@@ -1851,14 +1852,56 @@ if ($("imgUpload")) {
   };
 }
 
+
+function setupPinAreaField() {
+  if ($("area")) return;
+
+  // Address is no longer used by Pins. Hide its form row without touching
+  // competitor address fields such as s11Address/cjAddress.
+  const addressInput = $("address");
+  if (addressInput) {
+    const row = addressInput.closest(".field, .formGroup, .form-group, label") || addressInput.parentElement;
+    if (row) row.style.display = "none";
+    else addressInput.style.display = "none";
+  }
+
+  const noteInput = $("note");
+  if (!noteInput) return;
+
+  const select = document.createElement("select");
+  select.id = "area";
+  select.innerHTML = `
+    <option value="">-- เลือก Area --</option>
+    <option value="มีศักยภาพ">มีศักยภาพ</option>
+    <option value="ไม่มีศักยภาพ">ไม่มีศักยภาพ</option>
+  `;
+
+  // Reuse the site's existing input styling where possible.
+  select.className = noteInput.className || "";
+
+  const noteRow = noteInput.closest(".field, .formGroup, .form-group, label") || noteInput.parentElement;
+  const wrap = document.createElement("div");
+  wrap.className = noteRow?.className || "field";
+
+  const label = document.createElement("label");
+  label.setAttribute("for", "area");
+  label.textContent = "Area";
+  wrap.appendChild(label);
+  wrap.appendChild(select);
+
+  if (noteRow?.parentNode) noteRow.parentNode.insertBefore(wrap, noteRow);
+  else noteInput.parentNode?.insertBefore(wrap, noteInput);
+}
+setupPinAreaField();
+
 function openModal(p = null, latlng = null) {
   S.editing = p;
   S.pending = latlng || (p ? { lat: p.lat, lng: p.lng } : null);
   if (!S.pending) return;
   if ($("modalTitle")) $("modalTitle").textContent = p ? "แก้ไขจุด" : "เพิ่มจุด";
   if ($("title")) $("title").value = p?.title || "";
-  if ($("address")) $("address").value = p?.address || "";
   if ($("note")) $("note").value = p?.note || "";
+  if ($("area")) $("area").value = p?.area || "";
   selectColor(p?.color || COLORS[0]);
   const icon = p?.icon || "pin";
   document.querySelectorAll(".iconBtn").forEach(b => b.classList.toggle("active", b.dataset.icon === icon));
@@ -1894,8 +1937,8 @@ if ($("save")) {
     const payload = {
       room: S.room,
       title,
-      address: ($("address")?.value || "").trim(),
       note: ($("note")?.value || "").trim(),
+      area: ($("area")?.value || "").trim(),
       color: $("color").value,
       icon: $("icon").value,
       lat: S.pending.lat,
@@ -2197,8 +2240,8 @@ function renderTable(rows = S.all) {
     body.innerHTML = `<div class="tableEmpty">ยังไม่มีจุดในห้องนี้</div>`;
     return;
   }
-  body.innerHTML = `<table class="pinTable"><thead><tr><th>ชื่อจุด</th><th>ที่อยู่</th><th>ปักโดย</th></tr></thead><tbody>
-    ${pinmapTableRows.map(p => `<tr data-id="${p.id}"><td>${esc(p.title)}</td><td>${esc(p.address || "")}</td><td>${esc(p.created_by || "")}</td></tr>`).join("")}
+  body.innerHTML = `<table class="pinTable"><thead><tr><th>ชื่อจุด</th><th>Area</th><th>ปักโดย</th></tr></thead><tbody>
+    ${pinmapTableRows.map(p => `<tr data-id="${p.id}"><td>${esc(p.title)}</td><td>${esc(p.area || "")}</td><td>${esc(p.created_by || "")}</td></tr>`).join("")}
   </tbody></table>`;
   body.querySelectorAll("tr[data-id]").forEach(row => {
     row.onclick = () => {
@@ -2244,7 +2287,7 @@ const doExportXlsx = async () => {
     if (!allPins.length) return toast("ไม่มีจุดให้ export");
 
     const rows = allPins.map(p => ({
-      ชื่อจุด: p.title, ที่อยู่: p.address || "", รายละเอียด: p.note || "",
+      ชื่อจุด: p.title, Area: p.area || "", รายละเอียด: p.note || "",
       ละติจูด: p.lat, ลองจิจูด: p.lng, ปักโดย: p.created_by || "",
       วันที่: p.created_at ? new Date(p.created_at).toLocaleString("th-TH") : ""
     }));
@@ -2321,14 +2364,14 @@ if ($("saveRoom")) $("saveRoom").onclick = doSaveRoom;
 if ($("mSaveRoom")) $("mSaveRoom").onclick = () => { closeMobileMenu(); doSaveRoom(); };
 
 /* ── ROOM JOIN + PINS LOAD + REALTIME ── */
-const PINMAP_PIN_SELECT = "id,room,lat,lng,title,address,note,created_by,created_by_user_id,color,icon,created_at";
+const PINMAP_PIN_SELECT = "id,room,lat,lng,title,area,note,created_by,created_by_user_id,color,icon,created_at";
 let pinmapPinLoadSeq = 0;
 
 function pinmapPinMatchesSearch(p, q) {
   if (!q) return true;
   return (
     String(p?.title || "") + " " +
-    String(p?.address || "") + " " +
+    String(p?.area || "") + " " +
     String(p?.note || "")
   ).toLowerCase().includes(String(q).toLowerCase());
 }
@@ -2382,7 +2425,7 @@ async function loadPinsSearch(queryText) {
       .from("pins")
       .select(PINMAP_PIN_SELECT)
       .eq("room", S.room)
-      .or(`title.ilike.%${q}%,address.ilike.%${q}%,note.ilike.%${q}%`)
+      .or(`title.ilike.%${q}%,area.ilike.%${q}%,note.ilike.%${q}%`)
       .order("created_at", { ascending: true })
       .range(from, from + pageSize - 1);
 
@@ -2631,7 +2674,8 @@ if ($("mJoin")) $("mJoin").onclick = () => doJoin("mRoom", "mPasscode", "mJoin")
     [
       ["van", "Van", "van.webp"],
       ["m1", "M1", "m1.png"],
-      ["x", "X", "x.jpg"]
+      ["x", "X", "x.jpg"],
+      ["deal", "Deal", "deal.png"]
     ].forEach(([key,title,src]) => {
       const b = document.createElement("button");
       b.type = "button";
@@ -2647,6 +2691,23 @@ if ($("mJoin")) $("mJoin").onclick = () => doJoin("mRoom", "mPasscode", "mJoin")
       };
       iconRow.appendChild(b);
     });
+  }
+
+
+  if (iconRow && !iconRow.querySelector('[data-icon="deal"]')) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "iconBtn logoIconBtn";
+    b.dataset.icon = "deal";
+    b.title = "Deal";
+    b.innerHTML = `<img src="deal.png" alt="Deal" draggable="false" style="width:30px;height:30px;object-fit:contain">`;
+    b.onclick = () => {
+      document.querySelectorAll(".iconBtn").forEach(x => x.classList.remove("active"));
+      b.classList.add("active");
+      $("icon").value = "deal";
+      $("imgUploadWrap")?.classList.add("hidden");
+    };
+    iconRow.appendChild(b);
   }
 
   // Roads: load only when requested, and render only roads inside the current view.
