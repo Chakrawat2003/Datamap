@@ -1,9 +1,56 @@
+
+(function pinmapCompactDesktopUI(){
+  const st = document.createElement("style");
+  st.id = "pinmapCompactDesktopUI";
+  st.textContent = `
+@media (min-width: 769px) {
+  .topbar, .top-bar, header, .app-header {
+    min-height: 50px !important;
+  }
+  .topbar button, .top-bar button, header button, .app-header button,
+  .topbar input, .top-bar input, header input, .app-header input,
+  #pinmapMembersBtn, #pinmapNotifyBtn,
+  #leaveTeamBtn {
+    min-height: 34px !important;
+    height: 34px !important;
+    padding: 5px 9px !important;
+    font-size: 12px !important;
+    line-height: 1.05 !important;
+    border-radius: 8px !important;
+    white-space: nowrap !important;
+  }
+  #pinmapMembersBtn, #pinmapNotifyBtn, #leaveTeamBtn {
+    min-width: 0 !important;
+    width: auto !important;
+  }
+  #pinmapMembersBtn span, #pinmapNotifyBtn span {
+    display: inline !important;
+    white-space: nowrap !important;
+  }
+  .brand, .app-title, .logo-title {
+    font-size: 18px !important;
+  }
+  .sidebar, #sidebar, .left-panel, .menu-panel {
+    font-size: 13px !important;
+  }
+  .sidebar button, #sidebar button, .left-panel button, .menu-panel button,
+  .sidebar .menu-item, #sidebar .menu-item, .left-panel .menu-item, .menu-panel .menu-item {
+    min-height: 42px !important;
+    padding-top: 7px !important;
+    padding-bottom: 7px !important;
+    font-size: 13px !important;
+  }
+}
+`;
+  document.head.appendChild(st);
+})();
+
 const C = window.APP_CONFIG || {};
 const $ = id => document.getElementById(id);
 const dbConfigured = () => C.SUPABASE_URL && C.SUPABASE_ANON_KEY && !C.SUPABASE_URL.includes("YOUR_");
 
 const S = {
-  sb: null, ch: null, session: null, room: "", passcode: "",
+  sb: null, ch: null, notifyCh: null, session: null, room: "", passcode: "",
   adding: false, pending: null, editing: null, markers: new Map(),
   all: [], savedRooms: [], _locMarker: null, authMode: "signin"
 };
@@ -1030,10 +1077,11 @@ function s11PopupHtml(rec, opts = {}) {
   const editBtn = opts.custom || opts.editable
     ? `<button type="button" class="pin-nav-link s11EditBtn" data-key="${esc(rec._s11Key ?? rec._localId ?? rec.id ?? "")}" data-custom="${opts.custom ? "1" : "0"}" style="background:#111;position:relative;z-index:10000;pointer-events:auto;touch-action:manipulation">✎ แก้ไข</button>`
     : "";
+  const assignBtn = S.session ? `<button type="button" class="pin-nav-link pinAssignBtn" data-kind="7eleven" data-id="${esc(rec._s11Key ?? rec._localId ?? rec.id ?? '')}" data-title="${esc(rec.n || '7-Eleven')}" data-lat="${Number(rec.y)}" data-lng="${Number(rec.x)}" style="background:#2563eb">📌 มอบหมาย</button>` : "";
   return `<div class="pin-title">🏪 ${esc(rec.n)}</div>
     <div>${esc(rec.a)}</div>
     ${rec.note ? `<div class="pin-note">${esc(rec.note)}</div>` : ""}
-    <div class="pin-meta"><a href="${gmapUrl}" target="_blank" rel="noopener" class="pin-nav-link">🧭 นำทาง (Google Maps)</a> ${editBtn}</div>`;
+    <div class="pin-meta"><a href="${gmapUrl}" target="_blank" rel="noopener" class="pin-nav-link">🧭 นำทาง (Google Maps)</a> ${editBtn} ${assignBtn}</div>`;
 }
 
 const S11_COLORS = {
@@ -1244,6 +1292,11 @@ if ($("s11Save")) {
           : map.getCenter()
       );
 
+    const generatedAddress = window.pinmapAdminAddressFromLatLng
+      ? await window.pinmapAdminAddressFromLatLng(ll.lat, ll.lng)
+      : a;
+    const resolvedAddress = generatedAddress || a;
+
     try {
 
       /* ===== EDIT EXISTING ===== */
@@ -1252,7 +1305,8 @@ if ($("s11Save")) {
 
         const payload = {
           name_th: n,
-          address_th: a,
+          address_th: resolvedAddress,
+          address: resolvedAddress,
           latitude: ll.lat,
           longitude: ll.lng,
           note: note,
@@ -1285,7 +1339,8 @@ if ($("s11Save")) {
               .from("7-11")
               .update({
                 name_th: n,
-                address_th: a,
+                address_th: resolvedAddress,
+          address: resolvedAddress,
                 latitude: ll.lat,
                 longitude: ll.lng,
                 is_custom: true
@@ -1315,7 +1370,8 @@ if ($("s11Save")) {
         const payload = {
           id: id,
           name_th: n,
-          address_th: a,
+          address_th: resolvedAddress,
+          address: resolvedAddress,
           latitude: ll.lat,
           longitude: ll.lng,
           note: note,
@@ -1344,7 +1400,8 @@ if ($("s11Save")) {
               .insert({
                 id: id,
                 name_th: n,
-                address_th: a,
+                address_th: resolvedAddress,
+          address: resolvedAddress,
                 latitude: ll.lat,
                 longitude: ll.lng,
                 is_custom: true
@@ -1362,7 +1419,7 @@ if ($("s11Save")) {
           ? ctx.baseEditId
           : (typeof s11InsertedId !== "undefined" ? s11InsertedId : ("custom_" + Date.now())),
         n,
-        a,
+        a: resolvedAddress,
         note,
         color,
         y: ll.lat,
@@ -1578,12 +1635,13 @@ function cjDisplayName(rec) {
 function cjPopupHtml(rec, opts = {}) {
   const gmapUrl = `https://www.google.com/maps/dir/?api=1&destination=${rec.lat},${rec.lng}`;
   const editBtn = opts.editable ? `<button type="button" class="pin-nav-link cjEditBtn" data-key="${esc(rec._cjKey ?? rec._localId ?? rec.code ?? "")}" style="background:#111">✎ แก้ไข</button>` : "";
+  const assignBtn = S.session ? `<button type="button" class="pin-nav-link pinAssignBtn" data-kind="cjmore" data-id="${esc(rec._cjKey ?? rec._localId ?? rec.code ?? '')}" data-title="${esc(cjDisplayName(rec))}" data-lat="${Number(rec.lat)}" data-lng="${Number(rec.lng)}" style="background:#2563eb">📌 มอบหมาย</button>` : "";
   const tel = rec.tel ? `<div>โทร: ${esc(rec.tel)}</div>` : "";
   return `<div class="pin-title">🏪 ${esc(cjDisplayName(rec))}</div>
     ${rec.address ? `<div>${esc(rec.address)}</div>` : ""}
     ${tel}
     ${rec.description ? `<div class="pin-note">${esc(rec.description)}</div>` : ""}
-    <div class="pin-meta"><a href="${gmapUrl}" target="_blank" rel="noopener" class="pin-nav-link">🧭 นำทาง (Google Maps)</a> ${editBtn}</div>`;
+    <div class="pin-meta"><a href="${gmapUrl}" target="_blank" rel="noopener" class="pin-nav-link">🧭 นำทาง (Google Maps)</a> ${editBtn} ${assignBtn}</div>`;
 }
 /* =========================================================
    CJ MORE : SUPABASE VERSION
@@ -1731,6 +1789,124 @@ if ($("mCompetitorBtn")) $("mCompetitorBtn").onclick = toggleCompetitorPanel;
 if ($("cjToggle")) $("cjToggle").onclick = toggleCJ;
 if ($("mCJToggle")) $("mCJToggle").onclick = toggleCJ;
 
+
+/* =========================================================
+   EXTRA COMPETITORS
+   Big C Mini / Lawson108 / Lotus's go fresh / Tops / ถูกดี
+   ========================================================= */
+const PINMAP_EXTRA_COMPETITOR_DEFS = [
+  {key:"bigc", table:"bigc", label:"Big C Mini", logo:"logo-bigc-mini.webp"},
+  {key:"lawson108", table:"lawson108", label:"Lawson108", logo:"logo-lawson108.png"},
+  {key:"lotus", table:"lotus", label:"Lotus's go fresh", logo:"logo-lotusgo.png"},
+  {key:"tops", table:"tops", label:"Tops", logo:"logo-tops.png"},
+  {key:"thukdee", table:"thukdee", label:"ถูกดี", logo:"logo-thukdee.png"}
+];
+const PINMAP_EXTRA_COMPETITORS = new Map(
+  PINMAP_EXTRA_COMPETITOR_DEFS.map(d => [d.key, {
+    ...d, on: localStorage.getItem(`pinmap-${d.key}-on`) !== "0",
+    rows: [], markers: new Map(), layer: L.layerGroup()
+  }])
+);
+let pinmapExtraAddBrand=null, pinmapExtraMove=null, pinmapExtraEditing=null;
+
+(function(){
+  const st=document.createElement("style");st.id="pinmapExtraCompetitorStyle";
+  st.textContent=`
+  .pinmap-comp-panel{display:flex;flex-direction:column;gap:7px}
+  .pinmap-comp-row{display:grid;grid-template-columns:minmax(0,1fr) 42px;gap:7px}
+  .pinmap-comp-toggle,.pinmap-comp-add,.pinmap-comp-more{border:0;border-radius:10px;background:#f3f3f3;min-height:42px;font:inherit;font-weight:700;cursor:pointer}
+  .pinmap-comp-toggle{display:flex;align-items:center;gap:8px;padding:7px 10px;text-align:left}
+  .pinmap-comp-toggle.active{background:#111;color:#fff}
+  .pinmap-comp-toggle img{width:25px;height:25px;object-fit:contain;border-radius:5px;background:#fff}
+  .pinmap-comp-add{font-size:22px}.pinmap-comp-more{text-align:left;padding:8px 10px}
+  .pinmap-comp-extra.hidden{display:none!important}
+  .pinmap-extra-logo-marker{width:27px;height:27px;border-radius:50%;background:#fff;border:2px solid #111;box-shadow:0 1px 4px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .pinmap-extra-logo-marker img{width:21px;height:21px;object-fit:contain}
+  #pinmapExtraCompetitorModal{position:fixed;z-index:99999;inset:0;background:rgba(0,0,0,.38);display:flex;align-items:center;justify-content:center;padding:16px}
+  #pinmapExtraCompetitorModal.hidden{display:none!important}
+  .pem-card{width:min(420px,95vw);background:#fff;border-radius:16px;padding:16px;box-shadow:0 18px 60px rgba(0,0,0,.28)}
+  .pem-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}.pem-head img{width:36px;height:36px;object-fit:contain}.pem-head b{font-size:17px;flex:1}
+  .pem-x{border:0;background:#eee;border-radius:9px;width:34px;height:34px;font-size:20px}
+  .pem-card label{font-size:12px;font-weight:700;display:block;margin:9px 0 4px}.pem-card input,.pem-card textarea{width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:9px;padding:9px;font:inherit}
+  .pem-card textarea{min-height:70px;resize:vertical}.pem-address{font-size:11px;color:#555;background:#f7f7f7;border-radius:9px;padding:8px;line-height:1.45}
+  .pem-actions{display:flex;gap:8px;margin-top:13px}.pem-actions button{border:0;border-radius:9px;padding:9px 13px;font-weight:800;cursor:pointer}
+  .pem-save{background:#111;color:#fff;flex:1}.pem-delete{background:#fee2e2;color:#b91c1c}.pem-move{background:#e5e7eb}`;
+  document.head.appendChild(st);
+})();
+
+function pinmapExtraIcon(st){
+  return L.divIcon({className:"",html:`<span class="pinmap-extra-logo-marker"><img src="${st.logo}" alt="${esc(st.label)}"></span>`,iconSize:[27,27],iconAnchor:[13.5,13.5],popupAnchor:[0,-20]});
+}
+function pinmapExtraPopup(st,r){
+  const assignBtn = S.session ? `<button type="button" class="pin-nav-link pinAssignBtn" data-kind="${esc(st.key)}" data-id="${esc(r.id)}" data-title="${esc(r.name||st.label)}" data-lat="${Number(r.lat)}" data-lng="${Number(r.lng)}" style="background:#2563eb">📌 มอบหมาย</button>` : "";
+  return `<div class="pin-title"><img src="${st.logo}" style="width:22px;height:22px;object-fit:contain;vertical-align:middle;margin-right:5px">${esc(r.name||st.label)}</div><div>${esc(r.address||"")}</div>${r.note?`<div class="pin-note">${esc(r.note)}</div>`:""}<div class="pin-meta"><button type="button" class="pin-nav-link pinmap-extra-edit" data-brand="${st.key}" data-id="${esc(r.id)}">✎ แก้ไข</button> ${assignBtn}</div>`;
+}
+function pinmapExtraEnsureMarker(st,r){
+  const id=String(r.id);let m=st.markers.get(id);
+  if(!m){m=L.marker([+r.lat,+r.lng],{icon:pinmapExtraIcon(st)});st.markers.set(id,m)}
+  else m.setLatLng([+r.lat,+r.lng]);
+  if(m.getPopup())m.setPopupContent(pinmapExtraPopup(st,r));else m.bindPopup(pinmapExtraPopup(st,r),{closeButton:true,autoClose:true,closeOnClick:false});
+  return m;
+}
+function pinmapExtraRender(){
+  const bounds=pinmapVisibleBounds(),q=pinmapSearchText(),center=map.getCenter();
+  let remaining=Math.max(0,PINMAP_MAX_VISIBLE_POINTS-(cluster.getLayers?.().length||0)-(s11Cluster.getLayers?.().length||0)-(cjCluster.getLayers?.().length||0));
+  for(const st of PINMAP_EXTRA_COMPETITORS.values()){
+    st.layer.clearLayers();
+    if(!PINMAP_ALL_POINTS_VISIBLE||remaining<=0){if(map.hasLayer(st.layer))map.removeLayer(st.layer);continue}
+    const arr=st.rows.filter(r=>(q||st.on)&&(q||pinmapInViewport(r.lat,r.lng,bounds))&&(!q||(String(r.name||"")+" "+String(r.address||"")+" "+String(r.note||"")).toLowerCase().includes(q)));
+    arr.forEach(r=>r._d=pinmapDistanceToCenter(r.lat,r.lng,center));arr.sort((a,b)=>a._d-b._d);
+    const selected=arr.slice(0,remaining);selected.forEach(r=>st.layer.addLayer(pinmapExtraEnsureMarker(st,r)));remaining-=selected.length;
+    if(selected.length&&!map.hasLayer(st.layer))st.layer.addTo(map);if(!selected.length&&map.hasLayer(st.layer))map.removeLayer(st.layer);
+  }
+}
+async function pinmapLoadExtraCompetitors(){
+  if(!S.sb)return;
+  for(const st of PINMAP_EXTRA_COMPETITORS.values()){
+    const {data,error}=await S.sb.from(st.table).select("id,name,address,note,lat,lng,created_by,created_by_user_id,created_at").order("created_at",{ascending:true});
+    if(error){console.warn(`โหลด ${st.label} ไม่สำเร็จ`,error);continue}
+    st.rows=(data||[]).filter(r=>Number.isFinite(+r.lat)&&Number.isFinite(+r.lng));
+  }
+  pinmapBuildCompetitorPanel();pinmapExtraRender();
+}
+function pinmapExtraToggle(key){
+  const st=PINMAP_EXTRA_COMPETITORS.get(key);if(!st)return;st.on=!st.on;localStorage.setItem(`pinmap-${key}-on`,st.on?"1":"0");pinmapBuildCompetitorPanel();pinmapExtraRender();
+}
+function pinmapExtraStartAdd(key){
+  if(!S.session)return openAuth("เข้าสู่ระบบก่อน");
+  pinmapExtraAddBrand=key;pinmapExtraMove=null;
+  $("mode")?.classList.remove("hidden");if($("modeText"))$("modeText").textContent=`📍 แตะตำแหน่งเพื่อเพิ่ม ${PINMAP_EXTRA_COMPETITORS.get(key)?.label||""}`;
+  closeCompetitorPanels();
+}
+async function pinmapOpenExtraModal(key,row=null,ll=null){
+  const st=PINMAP_EXTRA_COMPETITORS.get(key);if(!st)return;
+  pinmapExtraEditing=row?{key,row}:null;ll=ll||(row?{lat:+row.lat,lng:+row.lng}:map.getCenter());
+  const addr=window.pinmapAdminAddressFromLatLng?await window.pinmapAdminAddressFromLatLng(ll.lat,ll.lng):(row?.address||"");
+  const m=$("pinmapExtraCompetitorModal");m.dataset.brand=key;m.dataset.lat=ll.lat;m.dataset.lng=ll.lng;
+  $("pemLogo").src=st.logo;$("pemTitle").textContent=row?`แก้ไข ${st.label}`:`เพิ่ม ${st.label}`;$("pemName").value=row?.name||st.label;$("pemNote").value=row?.note||"";$("pemAddress").textContent=addr||"ไม่พบข้อมูลขอบเขต";
+  $("pemDelete").classList.toggle("hidden",!row);$("pemMove").classList.toggle("hidden",!row);m.classList.remove("hidden");
+}
+(function(){
+  const m=document.createElement("div");m.id="pinmapExtraCompetitorModal";m.className="hidden";m.innerHTML=`<div class="pem-card"><div class="pem-head"><img id="pemLogo"><b id="pemTitle"></b><button id="pemClose" class="pem-x" type="button">×</button></div><label>ชื่อ</label><input id="pemName"><label>Address (อัตโนมัติจากพิกัด)</label><div id="pemAddress" class="pem-address"></div><label>Note</label><textarea id="pemNote"></textarea><div class="pem-actions"><button id="pemDelete" class="pem-delete hidden" type="button">ลบ</button><button id="pemMove" class="pem-move hidden" type="button">ย้ายจุด</button><button id="pemSave" class="pem-save" type="button">บันทึก</button></div></div>`;document.body.appendChild(m);
+  $("pemClose").onclick=()=>m.classList.add("hidden");m.onclick=e=>{if(e.target===m)m.classList.add("hidden")};
+  $("pemSave").onclick=async()=>{const st=PINMAP_EXTRA_COMPETITORS.get(m.dataset.brand);if(!st||!S.sb)return;const lat=+m.dataset.lat,lng=+m.dataset.lng,address=window.pinmapAdminAddressFromLatLng?await window.pinmapAdminAddressFromLatLng(lat,lng):$("pemAddress").textContent;const payload={name:($("pemName").value||st.label).trim(),address,note:($("pemNote").value||"").trim(),lat,lng,created_by:username(),created_by_user_id:S.session?.user?.id||null};
+    try{if(pinmapExtraEditing?.key===st.key){const {error}=await S.sb.from(st.table).update(payload).eq("id",pinmapExtraEditing.row.id);if(error)throw error}else{const {error}=await S.sb.from(st.table).insert(payload);if(error)throw error}m.classList.add("hidden");pinmapExtraEditing=null;await pinmapLoadExtraCompetitors();toast(`บันทึก ${st.label} แล้ว`)}catch(err){toast(err.message||"บันทึกไม่สำเร็จ")}};
+  $("pemDelete").onclick=async()=>{const e=pinmapExtraEditing;if(!e||!confirm("ลบจุดนี้ใช่หรือไม่?"))return;const st=PINMAP_EXTRA_COMPETITORS.get(e.key),{error}=await S.sb.from(st.table).delete().eq("id",e.row.id);if(error)return toast(error.message);m.classList.add("hidden");pinmapExtraEditing=null;await pinmapLoadExtraCompetitors();toast("ลบจุดแล้ว")};
+  $("pemMove").onclick=()=>{if(!pinmapExtraEditing)return;pinmapExtraMove=pinmapExtraEditing;m.classList.add("hidden");$("mode")?.classList.remove("hidden");if($("modeText"))$("modeText").textContent="📍 แตะตำแหน่งใหม่ของจุดคู่แข่ง";toast("แตะตำแหน่งใหม่บนแผนที่")};
+})();
+document.addEventListener("click",e=>{const b=e.target.closest?.(".pinmap-extra-edit");if(!b)return;const st=PINMAP_EXTRA_COMPETITORS.get(b.dataset.brand),r=st?.rows.find(x=>String(x.id)===String(b.dataset.id));if(r)pinmapOpenExtraModal(st.key,r)},true);
+map.on("click",async e=>{if(pinmapExtraMove){const x=pinmapExtraMove;pinmapExtraMove=null;$("mode")?.classList.add("hidden");await pinmapOpenExtraModal(x.key,x.row,e.latlng);toast("เลือกตำแหน่งใหม่แล้ว กดบันทึกเพื่อยืนยัน");return}if(pinmapExtraAddBrand){const k=pinmapExtraAddBrand;pinmapExtraAddBrand=null;$("mode")?.classList.add("hidden");await pinmapOpenExtraModal(k,null,e.latlng)}});
+
+function pinmapCompRow(toggleId,addId,label,logo,on,count=""){return `<div class="pinmap-comp-row"><button type="button" id="${toggleId}" class="pinmap-comp-toggle ${on?"active":""}">${logo?`<img src="${logo}" alt="">`:""}<span style="flex:1">${esc(label)}</span>${count?`<small>${count}</small>`:""}</button><button type="button" id="${addId}" class="pinmap-comp-add" title="เพิ่ม ${esc(label)}">＋</button></div>`}
+function pinmapBuildCompetitorPanel(){
+  const build=(panel,mobile=false)=>{if(!panel)return;const oldExtraOpen=!!panel.querySelector(".pinmap-comp-extra:not(.hidden)");
+    panel.innerHTML=`<div class="pinmap-comp-panel">${pinmapCompRow(mobile?"mS11Toggle":"s11Toggle",mobile?"mS11Add":"s11Add","7-Eleven","7-11-logo.png",S11.on)}${pinmapCompRow(mobile?"mCJToggle":"cjToggle",mobile?"mCJAdd":"cjAdd","CJ MORE","logo-cj-more.jpg",CJ.on)}<button type="button" class="pinmap-comp-more">อื่นๆ ▾</button><div class="pinmap-comp-extra ${oldExtraOpen?"":"hidden"}">${PINMAP_EXTRA_COMPETITOR_DEFS.map(d=>{const st=PINMAP_EXTRA_COMPETITORS.get(d.key);return pinmapCompRow(`${mobile?"m":""}pc_${d.key}`,`${mobile?"m":""}pcadd_${d.key}`,d.label,d.logo,st.on,st.rows.length?String(st.rows.length):"")}).join("")}</div></div>`;
+    $(mobile?"mS11Toggle":"s11Toggle").onclick=toggleS11;$(mobile?"mS11Add":"s11Add").onclick=()=>{triggerS11Add();closeCompetitorPanels()};$(mobile?"mCJToggle":"cjToggle").onclick=toggleCJ;$(mobile?"mCJAdd":"cjAdd").onclick=()=>{triggerCJAdd();closeCompetitorPanels()};panel.querySelector(".pinmap-comp-more").onclick=()=>panel.querySelector(".pinmap-comp-extra").classList.toggle("hidden");PINMAP_EXTRA_COMPETITOR_DEFS.forEach(d=>{$(`${mobile?"m":""}pc_${d.key}`).onclick=()=>pinmapExtraToggle(d.key);$(`${mobile?"m":""}pcadd_${d.key}`).onclick=()=>pinmapExtraStartAdd(d.key)})};
+  build($("competitorPanel"),false);build($("mCompetitorPanel"),true);
+}
+setTimeout(pinmapBuildCompetitorPanel,0);
+
+
 /* ---------- SAVE CJ MORE ---------- */
 
 if ($("cjSave")) {
@@ -1782,6 +1958,11 @@ if ($("cjSave")) {
             : map.getCenter()
         );
 
+      const generatedAddress = window.pinmapAdminAddressFromLatLng
+        ? await window.pinmapAdminAddressFromLatLng(ll.lat, ll.lng)
+        : address;
+      const resolvedAddress = generatedAddress || address;
+
       try {
 
         /* ===== EDIT ===== */
@@ -1798,7 +1979,7 @@ if ($("cjSave")) {
                 name: name,
                 code: code,
                 description: description,
-                address: address,
+                address: resolvedAddress,
                 lat: ll.lat,
                 long: ll.lng,
                 is_custom: true
@@ -1824,7 +2005,7 @@ if ($("cjSave")) {
                 code: code,
                 name: name,
                 description: description,
-                address: address,
+                address: resolvedAddress,
                 lat: ll.lat,
                 long: ll.lng,
                 is_custom: true
@@ -1853,7 +2034,7 @@ if ($("cjSave")) {
           code,
           name,
           description,
-          address,
+          address: resolvedAddress,
           lat: ll.lat,
           lng: ll.lng,
           is_custom: ctx.rec ? !!ctx.rec.is_custom : true
@@ -2032,11 +2213,13 @@ function marker(p) {
   const gmapUrl = `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
   const canEdit = !!S.session;
   m.bindPopup(`<div class="pin-title">${esc(p.title)}</div>
+    ${p.address ? `<div><strong>ที่อยู่:</strong> ${esc(p.address)}</div>` : ""}
     ${p.area ? `<div><strong>Area:</strong> ${esc(p.area)}</div>` : ""}
     <div class="pin-note">${esc(p.note || "")}</div>
     <div class="pin-meta">ปักโดย ${esc(p.created_by || "ผู้ใช้")}</div>
     <a href="${gmapUrl}" target="_blank" rel="noopener" class="pin-nav-link">🧭 นำทาง (Google Maps)</a>
-    ${canEdit ? `<button type="button" class="pin-nav-link pinEditBtn" data-id="${p.id}" style="background:#111">✎ แก้ไขจุด</button>` : ""}`);
+    ${canEdit ? `<button type="button" class="pin-nav-link pinEditBtn" data-id="${p.id}" style="background:#111">✎ แก้ไขจุด</button>` : ""}
+    ${S.session ? `<button type="button" class="pin-nav-link pinAssignBtn" data-kind="pin" data-id="${esc(p.id)}" data-title="${esc(p.title || 'Pin')}" data-lat="${Number(p.lat)}" data-lng="${Number(p.lng)}" style="background:#2563eb">📌 มอบหมาย</button>` : ""}`);
   S.markers.set(p.id, m);
   return m;
 }
@@ -2307,10 +2490,13 @@ if ($("authSubmit")) {
 
 const doLogout = async () => {
   if (S.sb) await S.sb.auth.signOut();
-  S.session = null; S.room = ""; S.savedRooms = []; S.all = [];
+  stopSavedRoomsRealtime();
+  stopPinmapPersonalNotifications();
+  S.session = null; S.room = ""; S.savedRooms = []; S.all = []; pinmapRoomContext = null; pinmapNotifications = [];
   if (S.ch) { S.sb.removeChannel(S.ch); S.ch = null; }
   cluster.clearLayers(); S.markers.clear();
   if ($("pinCount")) $("pinCount").textContent = "0";
+  pinmapRenderNotifyBadge(); pinmapSetRoomButtons();
   renderSavedRooms();
   refreshUserUI();
   toast("ออกจากระบบแล้ว");
@@ -2333,6 +2519,7 @@ if ($("profileSave")) {
       if (error) throw error;
       S.session.user = data.user;
       refreshUserUI();
+      if (S.room) { await pinmapTouchRoomMember(); await pinmapLoadRoomContext(); }
       $("profileModal").classList.add("hidden");
       toast("บันทึกชื่อผู้ใช้แล้ว");
     } catch (err) {
@@ -2347,6 +2534,7 @@ function refreshUserUI() {
   if ($("mUserInfo")) $("mUserInfo").textContent = `👤 ${S.session ? username() : "ผู้ใช้"} · ห้อง: ${S.room || "-"}`;
   if ($("room")) $("room").value = S.room || $("room").value;
   if ($("mRoom")) $("mRoom").value = S.room || $("mRoom").value;
+  if (typeof pinmapSetRoomButtons === "function") pinmapSetRoomButtons();
 }
 
 /* ── PIN MODAL ── */
@@ -2485,9 +2673,13 @@ if ($("save")) {
     if (!S.room) return toast("กรุณาเข้าห้องก่อน");
     const title = ($("title")?.value || "").trim();
     if (!title) return toast("กรุณาใส่ชื่อจุด");
+    const autoAddress = window.pinmapAdminAddressFromLatLng
+      ? await window.pinmapAdminAddressFromLatLng(S.pending.lat, S.pending.lng)
+      : "";
     const payload = {
       room: S.room,
       title,
+      address: autoAddress,
       note: ($("note")?.value || "").trim(),
       area: ($("area")?.value || "").trim(),
       color: $("color").value,
@@ -2797,8 +2989,8 @@ function renderTable(rows = S.all) {
     body.innerHTML = `<div class="tableEmpty">ยังไม่มีจุดในห้องนี้</div>`;
     return;
   }
-  body.innerHTML = `<table class="pinTable"><thead><tr><th>ชื่อจุด</th><th>Area</th><th>ปักโดย</th></tr></thead><tbody>
-    ${pinmapTableRows.map(p => `<tr data-id="${p.id}"><td>${esc(p.title)}</td><td>${esc(p.area || "")}</td><td>${esc(p.created_by || "")}</td></tr>`).join("")}
+  body.innerHTML = `<table class="pinTable"><thead><tr><th>ชื่อจุด</th><th>Address</th><th>Area</th><th>ปักโดย</th></tr></thead><tbody>
+    ${pinmapTableRows.map(p => `<tr data-id="${p.id}"><td>${esc(p.title)}</td><td>${esc(p.address || "")}</td><td>${esc(p.area || "")}</td><td>${esc(p.created_by || "")}</td></tr>`).join("")}
   </tbody></table>`;
   body.querySelectorAll("tr[data-id]").forEach(row => {
     row.onclick = () => {
@@ -2823,6 +3015,7 @@ const doTableToggle = async () => {
 
   try {
     const rows = await fetchAllPinsRoom();
+    await pinmapHydratePinAddresses(rows);
     renderTable(rows);
     panel?.classList.remove("hidden");
   } catch (err) {
@@ -2854,7 +3047,7 @@ if ($("tableClose")) $("tableClose").onclick = () => $("tablePanel").classList.a
   };
 
   let dashRows=[], dashData=[], dashRoom="", dashLoadedAt=0;
-  let dashProvince="", dashDistrict="", dashTambon="", dashIcon="";
+  let dashProvince="", dashDistrict="", dashTambon="", dashIcon="", dashArea="";
   const geoCache=new Map();
 
   const st=document.createElement("style");
@@ -2875,9 +3068,9 @@ if ($("tableClose")) $("tableClose").onclick = () => $("tablePanel").classList.a
     .pmd-body{overflow:auto;padding:13px 14px 18px}
     .pmd-body img{max-width:24px!important;max-height:24px!important;width:auto!important;height:auto!important;object-fit:contain!important}
     .pmd-note{font-size:11px;color:#6b7280;line-height:1.45;margin:0 0 10px}
-    .pmd-filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-bottom:12px}
+    .pmd-filters{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin-bottom:12px}
     .pmd-select{width:100%;min-width:0;padding:8px 9px;border:1px solid #d1d5db;border-radius:9px;background:#fff;font:inherit;font-size:12px}
-    .pmd-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:13px}
+    .pmd-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:13px}
     .pmd-kpi{background:#f6f7f8;border-radius:11px;padding:10px 9px;min-width:0}
     .pmd-kpi-v{font-size:20px;font-weight:900;line-height:1.15}
     .pmd-kpi-l{font-size:10px;color:#6b7280;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -2949,6 +3142,11 @@ if ($("tableClose")) $("tableClose").onclick = () => $("tablePanel").classList.a
         <select id="pmdDistrict" class="pmd-select"><option value="">ทุกอำเภอ/เขต</option></select>
         <select id="pmdTambon" class="pmd-select"><option value="">ทุกตำบล/แขวง</option></select>
         <select id="pmdIcon" class="pmd-select"><option value="">ทุกประเภทหมุด</option></select>
+        <select id="pmdArea" class="pmd-select">
+          <option value="">ทุก Area</option>
+          <option value="มีศักยภาพ">มีศักยภาพ</option>
+          <option value="ไม่มีศักยภาพ">ไม่มีศักยภาพ</option>
+        </select>
       </div>
       <div id="pmdStatus" class="pmd-status"></div>
       <div id="pmdContent"></div>
@@ -2968,6 +3166,7 @@ if ($("tableClose")) $("tableClose").onclick = () => $("tablePanel").classList.a
   };
   $("pmdTambon").onchange=e=>{dashTambon=e.target.value;renderDash()};
   $("pmdIcon").onchange=e=>{dashIcon=e.target.value;renderDash()};
+  $("pmdArea").onchange=e=>{dashArea=e.target.value;renderDash()};
 
   const rh=$("pmdResize");
   rh.addEventListener("pointerdown",e=>{
@@ -3117,6 +3316,20 @@ if ($("tableClose")) $("tableClose").onclick = () => $("tablePanel").classList.a
     return v;
   }
 
+  // Shared coordinate -> address helper for Pins and competitor points.
+  window.pinmapAdminLocationFromLatLng = async function(lat, lng){
+    try { await ensureAmphoeBoundaryData(); } catch (_) {}
+    return locate({lat:Number(lat), lng:Number(lng)});
+  };
+  window.pinmapAdminAddressFromLatLng = async function(lat, lng){
+    const a = await window.pinmapAdminLocationFromLatLng(lat, lng);
+    const parts = [];
+    if (a?.province && a.province !== "ไม่ทราบจังหวัด") parts.push(`จังหวัด ${a.province}`);
+    if (a?.district && a.district !== "ไม่ทราบอำเภอ/เขต") parts.push(`อำเภอ/เขต ${a.district}`);
+    if (a?.tambon && a.tambon !== "ไม่ทราบตำบล/แขวง") parts.push(`ตำบล/แขวง ${a.tambon}`);
+    return parts.join(" • ");
+  };
+
   const uniq=a=>[...new Set(a.filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),"th"));
   function opts(sel,vals,label,current=""){
     sel.innerHTML=`<option value="">${label}</option>`+vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
@@ -3173,7 +3386,8 @@ if ($("tableClose")) $("tableClose").onclick = () => $("tablePanel").classList.a
       (!dashProvince||x.province===dashProvince)&&
       (!dashDistrict||x.district===dashDistrict)&&
       (!dashTambon||x.tambon===dashTambon)&&
-      (!dashIcon||x._dashIcon===dashIcon)
+      (!dashIcon||x._dashIcon===dashIcon)&&
+      (!dashArea||String(x.area||"")===dashArea)
     );
   }
   function countBy(rows,fn){
@@ -3197,26 +3411,34 @@ if ($("tableClose")) $("tableClose").onclick = () => $("tablePanel").classList.a
     const m=new Map();
     rows.forEach(r=>{
       const k=r.province+"|||"+r.district+"|||"+r.tambon;
-      if(!m.has(k))m.set(k,{province:r.province,district:r.district,tambon:r.tambon,total:0,icons:{}});
-      const g=m.get(k);g.total++;g.icons[r._dashIcon]=(g.icons[r._dashIcon]||0)+1;
+      if(!m.has(k))m.set(k,{province:r.province,district:r.district,tambon:r.tambon,total:0,potential:0,noPotential:0,icons:{}});
+      const g=m.get(k);g.total++;
+      if(r.area==="มีศักยภาพ")g.potential++;
+      if(r.area==="ไม่มีศักยภาพ")g.noPotential++;
+      g.icons[r._dashIcon]=(g.icons[r._dashIcon]||0)+1;
     });
     const a=[...m.values()].sort((x,y)=>y.total-x.total);
     if(!a.length)return `<div class="pmd-empty">ไม่มีข้อมูลตามตัวกรอง</div>`;
     return `<div class="pmd-table-wrap"><table class="pmd-table"><thead><tr>
-      <th>จังหวัด / อำเภอ-เขต / ตำบล-แขวง</th><th>รวม</th>
+      <th>จังหวัด / อำเภอ-เขต / ตำบล-แขวง</th><th>รวม</th><th>มีศักยภาพ</th><th>ไม่มีศักยภาพ</th>
       ${icons.map(i=>`<th><span class="pmd-mini-icon">${iconVisual(i)}</span>${esc(iconName(i))}</th>`).join("")}
       </tr></thead><tbody>
-      ${a.map(g=>`<tr><td><b>${esc(g.province)}</b><br>${esc(g.district)}<br><span style="color:#777">${esc(g.tambon)}</span></td><td><b>${g.total.toLocaleString("th-TH")}</b></td>${icons.map(i=>`<td>${(g.icons[i]||0).toLocaleString("th-TH")}</td>`).join("")}</tr>`).join("")}
+      ${a.map(g=>`<tr><td><b>${esc(g.province)}</b><br>${esc(g.district)}<br><span style="color:#777">${esc(g.tambon)}</span></td><td><b>${g.total.toLocaleString("th-TH")}</b></td><td>${(g.potential||0).toLocaleString("th-TH")}</td><td>${(g.noPotential||0).toLocaleString("th-TH")}</td>${icons.map(i=>`<td>${(g.icons[i]||0).toLocaleString("th-TH")}</td>`).join("")}</tr>`).join("")}
       </tbody></table></div>`;
   }
 
   function renderDash(){
     const root=$("pmdContent"),rows=rowsNow();
     const ic=countBy(rows,x=>x._dashIcon),pc=countBy(rows,x=>x.province),dc=countBy(rows,x=>x.district),tc=countBy(rows,x=>x.tambon);
+    const areaCounts=countBy(rows,x=>String(x.area||"ยังไม่ได้ระบุ"));
+    const potentialCount=rows.filter(x=>x.area==="มีศักยภาพ").length;
+    const noPotentialCount=rows.filter(x=>x.area==="ไม่มีศักยภาพ").length;
     const icons=uniq(rows.map(x=>x._dashIcon));
     root.innerHTML=`
       <div class="pmd-kpis">
         <div class="pmd-kpi"><div class="pmd-kpi-v">${rows.length.toLocaleString("th-TH")}</div><div class="pmd-kpi-l">จุดที่ปักทั้งหมด</div></div>
+        <div class="pmd-kpi"><div class="pmd-kpi-v">${potentialCount.toLocaleString("th-TH")}</div><div class="pmd-kpi-l">Area: มีศักยภาพ</div></div>
+        <div class="pmd-kpi"><div class="pmd-kpi-v">${noPotentialCount.toLocaleString("th-TH")}</div><div class="pmd-kpi-l">Area: ไม่มีศักยภาพ</div></div>
         <div class="pmd-kpi"><div class="pmd-kpi-v">${ic.length}</div><div class="pmd-kpi-l">ประเภทหมุด</div></div>
         <div class="pmd-kpi"><div class="pmd-kpi-v" style="font-size:13px">${esc(pc[0]?.name||"—")}</div><div class="pmd-kpi-l">จังหวัดมากสุด</div></div>
         <div class="pmd-kpi"><div class="pmd-kpi-v" style="font-size:13px">${esc(dc[0]?.name||"—")}</div><div class="pmd-kpi-l">อำเภอ/เขตมากสุด</div></div>
@@ -3229,9 +3451,10 @@ if ($("tableClose")) $("tableClose").onclick = () => $("tablePanel").classList.a
 
       <div class="pmd-section">ภาพรวมเพิ่มเติม</div>
       <div class="pmd-chart-grid">
+        <div class="pmd-card"><div class="pmd-card-title">สัดส่วน Area</div>${donut(areaCounts,rows.length)}</div>
         <div class="pmd-card"><div class="pmd-card-title">สัดส่วนประเภทหมุด</div>${donut(ic,rows.length)}</div>
-        <div class="pmd-card"><div class="pmd-card-title">10 จังหวัดที่มีจุดปักมากที่สุด</div>${bars(pc)}</div>
       </div>
+      <div class="pmd-card" style="margin-top:10px"><div class="pmd-card-title">10 จังหวัดที่มีจุดปักมากที่สุด</div>${bars(pc)}</div>
 
       <div class="pmd-chart-grid" style="margin-top:10px">
         <div class="pmd-card"><div class="pmd-card-title">10 อำเภอ/เขตที่มีจุดปักมากที่สุด</div>${bars(dc)}</div>
@@ -3262,9 +3485,15 @@ const doExportXlsx = async () => {
     const allPins = await fetchAllPinsRoom();
     if (!allPins.length) return toast("ไม่มีจุดให้ export");
 
+    await pinmapHydratePinAddresses(allPins);
     const rows = allPins.map(p => ({
-      ชื่อจุด: p.title, Area: p.area || "", รายละเอียด: p.note || "",
-      ละติจูด: p.lat, ลองจิจูด: p.lng, ปักโดย: p.created_by || "",
+      ชื่อจุด: p.title,
+      Address: p.address || "",
+      Area: p.area || "",
+      รายละเอียด: p.note || "",
+      ละติจูด: p.lat,
+      ลองจิจูด: p.lng,
+      ปักโดย: p.created_by || "",
       วันที่: p.created_at ? new Date(p.created_at).toLocaleString("th-TH") : ""
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -3296,9 +3525,41 @@ if ($("share")) $("share").onclick = doShare;
 if ($("mShare")) $("mShare").onclick = () => { closeMobileMenu(); doShare(); };
 
 /* ── SAVED ROOMS ── */
+let pinmapSavedRoomsCh = null;
+
+function stopSavedRoomsRealtime(){
+  if(pinmapSavedRoomsCh && S.sb){
+    try{ S.sb.removeChannel(pinmapSavedRoomsCh); }catch(_){}
+  }
+  pinmapSavedRoomsCh = null;
+}
+
+function startSavedRoomsRealtime(){
+  stopSavedRoomsRealtime();
+  if(!S.sb || !S.session) return;
+
+  const uid = S.session.user.id;
+  pinmapSavedRoomsCh = S.sb
+    .channel(`pinmap-saved-rooms-${uid}`)
+    .on("postgres_changes", {
+      event: "*",
+      schema: "public",
+      table: "saved_rooms",
+      filter: `user_id=eq.${uid}`
+    }, () => {
+      // Any save/delete from another device refreshes this account's list.
+      loadSavedRooms();
+    })
+    .subscribe();
+}
+
 async function loadSavedRooms() {
   if (!S.sb || !S.session) { S.savedRooms = []; renderSavedRooms(); return; }
-  const { data, error } = await S.sb.from("saved_rooms").select("id,user_id,room,label,created_at").order("created_at", { ascending: false });
+  const { data, error } = await S.sb
+    .from("saved_rooms")
+    .select("id,user_id,room,label,created_at")
+    .eq("user_id", S.session.user.id)
+    .order("created_at", { ascending: false });
   if (!error) S.savedRooms = data || [];
   renderSavedRooms();
 }
@@ -3316,9 +3577,9 @@ function renderSavedRooms() {
 async function enterSavedRoom(room) {
   if (!S.session) return openAuth("เข้าสู่ระบบก่อน");
   try {
-    const { data, error } = await S.sb.rpc("room_enter_saved", { p_room: room });
+    const { data, error } = await S.sb.rpc("pinmap_enter_member", { p_room: room });
     if (error) throw error;
-    if (!data) return toast("ไม่พบสิทธิ์เข้าห้องนี้");
+    if (!data) return toast("คุณไม่ได้เป็นสมาชิกห้องนี้แล้ว");
     await enterRoom(room);
   } catch (err) {
     toast(err.message || "เข้าห้องไม่สำเร็จ");
@@ -3339,14 +3600,276 @@ const doSaveRoom = async () => {
 if ($("saveRoom")) $("saveRoom").onclick = doSaveRoom;
 if ($("mSaveRoom")) $("mSaveRoom").onclick = () => { closeMobileMenu(); doSaveRoom(); };
 
+
+/* =========================================================
+   TEAM / ROOM LEADERS / APPROVAL / NOTIFICATIONS / ASSIGNMENTS
+   ========================================================= */
+let pinmapRoomContext = null;
+let pinmapNotifications = [];
+let pinmapNotificationPanelOpen = false;
+let pinmapAssignTarget = null;
+
+(function setupPinmapTeamUi(){
+  if (document.getElementById("pinmapTeamUiStyle")) return;
+  const st = document.createElement("style");
+  st.id = "pinmapTeamUiStyle";
+  st.textContent = `
+    .pinmap-notify-btn,.pinmap-members-btn,.pinmap-leader-btn,.pinmap-leave-team-btn{border:0;border-radius:9px;font:inherit;font-weight:700;cursor:pointer;min-height:36px;padding:7px 10px;position:relative}
+    .pinmap-notify-btn{background:#f3f4f6}.pinmap-members-btn{background:#f3f4f6}.pinmap-leader-btn{background:#fef3c7;color:#92400e}.pinmap-leave-team-btn{background:#111;color:#fff}
+    .ptm-online-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#22c55e;margin-right:6px;box-shadow:0 0 0 2px rgba(34,197,94,.14);vertical-align:1px}
+    .ptm-offline-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#d1d5db;margin-right:6px;vertical-align:1px}
+    .pinmap-notify-badge{position:absolute;right:-5px;top:-6px;min-width:18px;height:18px;border-radius:999px;background:#ef4444;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;padding:0 4px;box-sizing:border-box}
+    .pinmap-notify-badge.hidden,.pinmap-leader-btn.hidden,.pinmap-leave-team-btn.hidden{display:none!important}
+    #pinmapNotificationPanel{position:fixed;z-index:99997;right:18px;top:74px;width:min(430px,calc(100vw - 24px));max-height:70vh;overflow:auto;background:#fff;border:1px solid #ddd;border-radius:14px;box-shadow:0 15px 45px rgba(0,0,0,.25);padding:10px}
+    #pinmapNotificationPanel.hidden{display:none!important}.pnt-head{display:flex;align-items:center;gap:8px;padding:4px 4px 9px;border-bottom:1px solid #eee}.pnt-head b{flex:1}.pnt-close{border:0;background:#eee;border-radius:8px;width:32px;height:32px;font-size:18px}
+    .pnt-item{padding:10px;border-bottom:1px solid #eee}.pnt-item.unread{background:#f8fbff}.pnt-title{font-weight:800;font-size:13px}.pnt-msg{font-size:12px;color:#444;margin-top:4px;line-height:1.45}.pnt-meta{font-size:10px;color:#888;margin-top:5px}.pnt-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.pnt-actions button{border:0;border-radius:8px;padding:7px 9px;font-size:11px;font-weight:800;cursor:pointer}.pnt-ok{background:#111;color:#fff}.pnt-no{background:#fee2e2;color:#b91c1c}.pnt-go{background:#dbeafe;color:#1d4ed8}
+    #pinmapRoomManager,#pinmapAssignModal,#pinmapNotificationDetail,#pinmapLeaveConfirm{position:fixed;z-index:99999;inset:0;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;padding:14px}
+    #pinmapRoomManager.hidden,#pinmapAssignModal.hidden,#pinmapNotificationDetail.hidden,#pinmapLeaveConfirm.hidden{display:none!important}
+    .ptm-card{width:min(560px,96vw);max-height:88vh;overflow:auto;background:#fff;border-radius:16px;padding:15px;box-shadow:0 18px 60px rgba(0,0,0,.3)}.ptm-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}.ptm-head b{font-size:17px;flex:1}.ptm-x{border:0;background:#eee;width:34px;height:34px;border-radius:9px;font-size:19px}
+    .ptm-pass{display:grid;grid-template-columns:1fr auto;gap:7px;margin:10px 0}.ptm-pass input{min-width:0;border:1px solid #d1d5db;border-radius:9px;padding:9px;font:inherit}.ptm-pass button{border:0;border-radius:9px;background:#111;color:#fff;font-weight:800;padding:0 12px}
+    .ptm-member{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid #eee}.ptm-member-main{flex:1;min-width:0}.ptm-name{font-weight:800;font-size:13px}.ptm-sub{font-size:10px;color:#777}.ptm-badge{display:inline-block;font-size:9px;padding:2px 6px;border-radius:999px;background:#fef3c7;color:#92400e;margin-left:5px}.ptm-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}.ptm-actions button{border:0;border-radius:7px;padding:6px 7px;font-size:10px;font-weight:800;cursor:pointer}.ptm-add{background:#dbeafe;color:#1d4ed8}.ptm-transfer{background:#ede9fe;color:#6d28d9}.ptm-remove{background:#f3f4f6}.ptm-kick{background:#fee2e2;color:#b91c1c}.ptm-approve{background:#dcfce7;color:#166534}
+    .pta-members{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:8px 0}.pta-user{display:flex;align-items:center;gap:7px;border:1px solid #e5e7eb;border-radius:9px;padding:8px;font-size:12px}.pta-user input{width:16px;height:16px}.pta-desc{width:100%;min-height:95px;box-sizing:border-box;border:1px solid #d1d5db;border-radius:9px;padding:9px;font:inherit}.pta-send{width:100%;border:0;border-radius:10px;background:#111;color:#fff;font-weight:800;padding:10px;margin-top:10px}
+    @media(max-width:767px){#pinmapNotificationPanel{right:8px;left:8px;top:64px;width:auto;max-height:72vh}.pta-members{grid-template-columns:1fr}.pinmap-notify-btn,.pinmap-members-btn,.pinmap-leader-btn,.pinmap-leave-team-btn{min-height:34px;padding:6px 8px;font-size:12px}}
+  `;
+  document.head.appendChild(st);
+
+  function makeNotifyButton(mobile=false){
+    const ref = document.querySelector(mobile ? ".m-online" : ".online");
+    if (!ref) return;
+
+    // Replace the old Online button with Members in this room.
+    ref.classList.remove(mobile ? "m-online" : "online");
+    ref.classList.add("pinmap-members-btn");
+    ref.id = mobile ? "mPinmapMembersBtn" : "pinmapMembersBtn";
+    ref.innerHTML = "👥 <span>สมาชิกในห้อง</span>";
+    ref.onclick = e => { e.stopPropagation(); openPinmapMembers(); };
+
+    const id = mobile ? "mPinmapNotifyBtn" : "pinmapNotifyBtn";
+    if ($(id)) return;
+    const b = document.createElement("button"); b.type="button"; b.id=id; b.className="pinmap-notify-btn"; b.innerHTML='🔔 <span>แจ้งเตือน</span><i class="pinmap-notify-badge hidden">0</i>';
+    ref.insertAdjacentElement("afterend", b); b.onclick=e=>{e.stopPropagation(); togglePinmapNotifications()};
+    // ไม่มีปุ่ม "หัวห้อง" แยกบนแถบบนแล้ว
+    // การจัดการหัวห้อง/สมาชิกทำผ่านปุ่ม "สมาชิกในห้อง" เพียงจุดเดียว
+  }
+  makeNotifyButton(false); makeNotifyButton(true);
+
+  function makeLeaveButton(id,mobile=false){
+    const ref=$(id); if(!ref)return; const bid=mobile?"mLeaveTeamBtn":"leaveTeamBtn"; if($(bid))return;
+    const b=document.createElement("button"); b.type="button"; b.id=bid; b.className="pinmap-leave-team-btn hidden"; b.textContent="ออกจากทีมถาวร"; ref.insertAdjacentElement("afterend",b); b.onclick=()=>$("pinmapLeaveConfirm")?.classList.remove("hidden");
+  }
+  makeLeaveButton("logoutBtn",false); makeLeaveButton("mLogoutBtn",true);
+
+  const np=document.createElement("div"); np.id="pinmapNotificationPanel"; np.className="hidden"; np.innerHTML='<div class="pnt-head"><b>🔔 การแจ้งเตือน</b><button type="button" id="pinmapNotifyRefresh" class="pnt-close" title="รีเฟรช">↻</button><button type="button" id="pinmapNotifyClose" class="pnt-close">×</button></div><div id="pinmapNotificationList"></div>'; document.body.appendChild(np);
+  $("pinmapNotifyClose").onclick=()=>{np.classList.add("hidden");pinmapNotificationPanelOpen=false}; $("pinmapNotifyRefresh").onclick=()=>loadPinmapNotifications();
+
+  const rm=document.createElement("div"); rm.id="pinmapRoomManager"; rm.className="hidden"; rm.innerHTML='<div class="ptm-card"><div class="ptm-head"><b>👑 จัดการหัวห้องและสมาชิก</b><button type="button" id="ptmClose" class="ptm-x">×</button></div><div id="ptmRoomInfo"></div><div class="ptm-pass"><input id="ptmPassword" type="text" placeholder="รหัสห้อง"><button type="button" id="ptmSavePassword">เปลี่ยนรหัส</button></div><div id="ptmMembers"></div></div>';document.body.appendChild(rm); $("ptmClose").onclick=()=>rm.classList.add("hidden"); $("ptmSavePassword").onclick=changePinmapRoomPassword;
+
+  const am=document.createElement("div"); am.id="pinmapAssignModal"; am.className="hidden"; am.innerHTML='<div class="ptm-card"><div class="ptm-head"><b id="ptaTitle">📌 มอบหมายจุด</b><button type="button" id="ptaClose" class="ptm-x">×</button></div><div id="ptaPoint" class="pnt-msg"></div><div style="font-weight:800;font-size:12px;margin-top:12px">เลือกสมาชิก (เลือกได้หลายคน)</div><div id="ptaMembers" class="pta-members"></div><div style="font-weight:800;font-size:12px;margin:8px 0 4px">คำอธิบาย</div><textarea id="ptaDescription" class="pta-desc" placeholder="รายละเอียดงาน / สิ่งที่ต้องทำ"></textarea><button type="button" id="ptaSend" class="pta-send">ส่งมอบหมาย</button></div>';document.body.appendChild(am); $("ptaClose").onclick=()=>am.classList.add("hidden"); $("ptaSend").onclick=sendPinmapAssignment;
+
+  const nd=document.createElement("div");nd.id="pinmapNotificationDetail";nd.className="hidden";nd.innerHTML='<div class="ptm-card" style="width:min(460px,95vw)"><div class="ptm-head"><b>รายละเอียด</b><button type="button" id="pndClose" class="ptm-x">×</button></div><div id="pndBody" class="pnt-msg" style="font-size:13px;white-space:pre-wrap"></div><div id="pndActions" class="pnt-actions"></div></div>';document.body.appendChild(nd); $("pndClose").onclick=()=>nd.classList.add("hidden");
+
+  const lc=document.createElement("div");lc.id="pinmapLeaveConfirm";lc.className="hidden";lc.innerHTML='<div class="ptm-card" style="width:min(390px,94vw)"><div class="ptm-head"><b>ออกจากทีมถาวร</b></div><div style="font-size:14px;line-height:1.55">คุณแน่ใจว่าจะออกจากทีมถาวรเลยใช่มั้ย?</div><div class="pnt-actions" style="margin-top:14px"><button type="button" id="leaveTeamYes" class="pnt-no" style="flex:1">ใช่</button><button type="button" id="leaveTeamNo" class="pnt-ok" style="flex:1">ไม่</button></div></div>';document.body.appendChild(lc); $("leaveTeamNo").onclick=()=>lc.classList.add("hidden"); $("leaveTeamYes").onclick=leavePinmapTeamForever;
+})();
+
+function pinmapSetRoomButtons(){
+  const inRoom=!!S.room, isLeader=!!pinmapRoomContext?.is_leader;
+  $("leaveTeamBtn")?.classList.toggle("hidden",!inRoom); $("mLeaveTeamBtn")?.classList.toggle("hidden",!inRoom);
+  $("pinmapMembersBtn")?.classList.toggle("hidden",!inRoom); $("mPinmapMembersBtn")?.classList.toggle("hidden",!inRoom);
+  $("pinmapLeaderBtn")?.classList.toggle("hidden",!(inRoom&&isLeader)); $("mPinmapLeaderBtn")?.classList.toggle("hidden",!(inRoom&&isLeader));
+}
+
+async function pinmapLoadRoomContext(){
+  pinmapRoomContext=null; pinmapSetRoomButtons();
+  if(!S.sb||!S.session||!S.room)return null;
+  try{const {data,error}=await S.sb.rpc("pinmap_room_context",{p_room:S.room});if(error)throw error;pinmapRoomContext=data||null;pinmapSetRoomButtons();return pinmapRoomContext}catch(err){console.warn("room context",err);return null}
+}
+
+async function pinmapTouchRoomMember(){
+  if(!S.sb||!S.room||!S.session)return;
+  try{await S.sb.rpc("pinmap_touch_member",{p_room:S.room,p_username:username()})}catch(err){console.warn("touch member",err)}
+}
+
+async function openPinmapMembers(){
+  if(!S.room)return toast("กรุณาเข้าห้องก่อน");
+  const ctx=await pinmapLoadRoomContext();
+  if(!ctx?.is_member)return toast("คุณไม่ได้เป็นสมาชิกห้องนี้");
+  $("ptmRoomInfo").innerHTML=`<div style="font-weight:800">👥 สมาชิกในห้อง: ${esc(S.room)}</div><div style="font-size:11px;color:#777">${ctx.is_leader?"คุณเป็นหัวห้อง สามารถเพิ่ม/โอน/ปลดหัว และเตะสมาชิกได้":"จุดสีเขียว = ออนไลน์ตอนนี้"}</div>`;
+  const pass=$("ptmPassword"), passWrap=pass?.closest(".ptm-pass");
+  if(passWrap)passWrap.style.display=ctx.is_leader?"grid":"none";
+  if(pass)pass.value=ctx.is_leader?(ctx.password||""):"";
+  renderPinmapRoomMembers(ctx.members||[],!!ctx.is_leader);
+  $("pinmapRoomManager").classList.remove("hidden");
+}
+async function openPinmapRoomManager(){ return openPinmapMembers(); }
+
+function renderPinmapRoomMembers(members,isLeader=!!pinmapRoomContext?.is_leader){
+  const wrap=$("ptmMembers"); if(!wrap)return; const me=S.session?.user?.id;
+  const online=getOnlineUsers();
+  const active=members.filter(x=>x.status==="active"), pending=members.filter(x=>x.status==="pending");
+  let html='';
+  if(isLeader&&pending.length){
+    html+='<div style="font-weight:800;margin:13px 0 5px">คำขอเข้าห้อง</div>'+
+      pending.map(m=>`<div class="ptm-member"><div class="ptm-member-main"><div class="ptm-name"><i class="${online.has(String(m.user_id))?'ptm-online-dot':'ptm-offline-dot'}"></i>${esc(m.username||'ผู้ใช้')}</div><div class="ptm-sub">รออนุมัติ</div></div><div class="ptm-actions"><button class="ptm-approve" data-room-approve="${esc(m.user_id)}" data-ok="1">ยอมรับ</button><button class="ptm-kick" data-room-approve="${esc(m.user_id)}" data-ok="0">ปฏิเสธ</button></div></div>`).join('');
+  }
+  html+='<div style="font-weight:800;margin:13px 0 5px">สมาชิก</div>'+
+    active.map(m=>{
+      const isMe=String(m.user_id)===String(me), isOnline=online.has(String(m.user_id));
+      const actions=isLeader
+        ? `${!m.is_leader?`<button class="ptm-add" data-leader-action="add" data-user="${esc(m.user_id)}">+ หัว</button><button class="ptm-transfer" data-leader-action="transfer" data-user="${esc(m.user_id)}">โอนหัว</button>`:''}${m.is_leader&&!isMe?`<button class="ptm-remove" data-leader-action="remove" data-user="${esc(m.user_id)}">ปลดหัว</button>`:''}${!isMe?`<button class="ptm-kick" data-kick-user="${esc(m.user_id)}">เตะ</button>`:''}`
+        : '';
+      return `<div class="ptm-member"><div class="ptm-member-main"><div class="ptm-name"><i class="${isOnline?'ptm-online-dot':'ptm-offline-dot'}"></i>${esc(m.username||'ผู้ใช้')}${m.is_leader?'<span class="ptm-badge">👑 หัวห้อง</span>':''}${isMe?' <span style="font-size:9px;color:#777">(คุณ)</span>':''}</div><div class="ptm-sub">${isOnline?'ออนไลน์':'ออฟไลน์'}</div></div><div class="ptm-actions">${actions}</div></div>`;
+    }).join('');
+  wrap.innerHTML=html;
+  if(isLeader){
+    wrap.querySelectorAll('[data-room-approve]').forEach(b=>b.onclick=()=>approvePinmapMember(b.dataset.roomApprove,b.dataset.ok==='1'));
+    wrap.querySelectorAll('[data-leader-action]').forEach(b=>b.onclick=()=>changePinmapLeader(b.dataset.user,b.dataset.leaderAction));
+    wrap.querySelectorAll('[data-kick-user]').forEach(b=>b.onclick=()=>kickPinmapMember(b.dataset.kickUser));
+  }
+}
+async function approvePinmapMember(userId,approve){
+  try{const {error}=await S.sb.rpc("pinmap_approve_member",{p_room:S.room,p_user_id:userId,p_approve:!!approve});if(error)throw error;toast(approve?"อนุมัติสมาชิกแล้ว":"ปฏิเสธคำขอแล้ว");await openPinmapMembers();await loadPinmapNotifications()}catch(err){toast(err.message||"ทำรายการไม่สำเร็จ")}
+}
+async function changePinmapLeader(userId,mode){
+  const msg=mode==='transfer'?"โอนหัวห้องให้คนนี้ และปลดคุณจากหัวห้องใช่หรือไม่?":mode==='add'?"เพิ่มคนนี้เป็นหัวห้องใช่หรือไม่?":"ปลดคนนี้จากหัวห้องใช่หรือไม่?"; if(!confirm(msg))return;
+  try{const {error}=await S.sb.rpc("pinmap_set_leader",{p_room:S.room,p_user_id:userId,p_mode:mode});if(error)throw error;toast("อัปเดตหัวห้องแล้ว");await pinmapLoadRoomContext();if(pinmapRoomContext?.is_leader)await openPinmapMembers();else $("pinmapRoomManager")?.classList.add("hidden") }catch(err){toast(err.message||"ทำรายการไม่สำเร็จ")}
+}
+async function kickPinmapMember(userId){
+  if(!confirm("เตะสมาชิก/หัวห้องคนนี้ออกจากทีมถาวรใช่หรือไม่?"))return;
+  try{const {error}=await S.sb.rpc("pinmap_kick_member",{p_room:S.room,p_user_id:userId});if(error)throw error;toast("เตะออกจากทีมแล้ว");await openPinmapMembers()}catch(err){toast(err.message||"เตะไม่สำเร็จ")}
+}
+async function changePinmapRoomPassword(){
+  const pass=$("ptmPassword")?.value||""; if(!pass)return toast("กรุณาใส่รหัสห้องใหม่");
+  try{const {error}=await S.sb.rpc("pinmap_change_room_password",{p_room:S.room,p_passcode:pass});if(error)throw error;toast("เปลี่ยนรหัสห้องแล้ว");await pinmapLoadRoomContext()}catch(err){toast(err.message||"เปลี่ยนรหัสไม่สำเร็จ")}
+}
+
+async function pinmapExitRoomLocal(message="ออกจากห้องแล้ว"){
+  if(S.ch){try{S.sb.removeChannel(S.ch)}catch(_){}S.ch=null} S.room=""; pinmapRoomContext=null; S.all=[];cluster.clearLayers();S.markers.clear(); if($("pinCount"))$("pinCount").textContent="0"; if($("room"))$("room").value="";if($("mRoom"))$("mRoom").value="";pinmapSetRoomButtons();refreshUserUI();closeMobileMenu();toast(message)
+}
+async function leavePinmapTeamForever(){
+  $("pinmapLeaveConfirm")?.classList.add("hidden"); if(!S.room)return;
+  const room=S.room;
+  try{const {error}=await S.sb.rpc("pinmap_leave_room",{p_room:room});if(error)throw error;await pinmapExitRoomLocal("ออกจากทีมถาวรแล้ว");await loadSavedRooms();await loadPinmapNotifications()}catch(err){toast(err.message||"ออกจากทีมไม่สำเร็จ")}
+}
+
+function pinmapUnreadCount(){return pinmapNotifications.filter(n=>!n.read_at).length}
+function pinmapRenderNotifyBadge(){const n=pinmapUnreadCount();["pinmapNotifyBtn","mPinmapNotifyBtn"].forEach(id=>{const b=$(id)?.querySelector('.pinmap-notify-badge');if(!b)return;b.textContent=n>99?'99+':String(n);b.classList.toggle('hidden',!n)})}
+async function loadPinmapNotifications(){
+  if(!S.sb||!S.session){pinmapNotifications=[];pinmapRenderNotifyBadge();renderPinmapNotifications();return}
+  try{const {data,error}=await S.sb.from("pinmap_notifications").select("id,user_id,room,type,title,message,actor_id,actor_name,lat,lng,pin_kind,pin_id,payload,read_at,created_at").eq("user_id",S.session.user.id).order("created_at",{ascending:false}).limit(100);if(error)throw error;pinmapNotifications=data||[];pinmapRenderNotifyBadge();renderPinmapNotifications()}catch(err){console.warn("notifications",err)}
+}
+function togglePinmapNotifications(){pinmapNotificationPanelOpen=!pinmapNotificationPanelOpen;$("pinmapNotificationPanel")?.classList.toggle("hidden",!pinmapNotificationPanelOpen);if(pinmapNotificationPanelOpen)loadPinmapNotifications()}
+function renderPinmapNotifications(){
+  const wrap=$("pinmapNotificationList");if(!wrap)return;if(!pinmapNotifications.length){wrap.innerHTML='<div style="padding:22px;text-align:center;color:#777;font-size:12px">ยังไม่มีการแจ้งเตือน</div>';return}
+  wrap.innerHTML=pinmapNotifications.map(n=>{const d=new Date(n.created_at);const p=n.payload||{};let actions='';if(n.type==='join_request'&&p.requester_id){actions=`<button class="pnt-ok" data-notify-approve="${esc(p.requester_id)}" data-room="${esc(n.room||'')}">ยอมรับ</button><button class="pnt-no" data-notify-reject="${esc(p.requester_id)}" data-room="${esc(n.room||'')}">ปฏิเสธ</button>`}if(n.type==='join_approved'){actions+=`<button class="pnt-ok" data-notify-enter="${esc(n.room||'')}">เข้าห้อง</button>`}if((n.type==='assignment_received'||n.type==='assignment_sent')&&Number.isFinite(Number(n.lat))&&Number.isFinite(Number(n.lng))){actions+=`<button class="pnt-ok" data-notify-detail="${n.id}">อ่านรายละเอียด</button><button class="pnt-go" data-notify-warp="${n.id}">วาร์ปไปจุด</button>`}return `<div class="pnt-item ${n.read_at?'':'unread'}" data-notify-id="${n.id}"><div class="pnt-title">${esc(n.title||'แจ้งเตือน')}</div><div class="pnt-msg">${esc(n.message||'')}</div><div class="pnt-meta">${esc(n.room?`ห้อง ${n.room} • `:'')}${isNaN(d)?'':d.toLocaleString('th-TH')}</div>${actions?`<div class="pnt-actions">${actions}</div>`:''}</div>`}).join('');
+  wrap.querySelectorAll('[data-notify-approve]').forEach(b=>b.onclick=()=>approveJoinFromNotification(b.dataset.room,b.dataset.notifyApprove,true));wrap.querySelectorAll('[data-notify-reject]').forEach(b=>b.onclick=()=>approveJoinFromNotification(b.dataset.room,b.dataset.notifyReject,false));wrap.querySelectorAll('[data-notify-enter]').forEach(b=>b.onclick=()=>enterRoom(b.dataset.notifyEnter));wrap.querySelectorAll('[data-notify-detail]').forEach(b=>b.onclick=()=>openPinmapNotificationDetail(Number(b.dataset.notifyDetail)));wrap.querySelectorAll('[data-notify-warp]').forEach(b=>b.onclick=()=>warpToPinmapNotification(Number(b.dataset.notifyWarp)));wrap.querySelectorAll('.pnt-item').forEach(el=>el.addEventListener('click',e=>{if(e.target.closest('button'))return;markPinmapNotificationRead(Number(el.dataset.notifyId))}));
+}
+async function markPinmapNotificationRead(id){const n=pinmapNotifications.find(x=>Number(x.id)===Number(id));if(!n||n.read_at)return;try{await S.sb.from("pinmap_notifications").update({read_at:new Date().toISOString()}).eq("id",id).eq("user_id",S.session.user.id);n.read_at=new Date().toISOString();pinmapRenderNotifyBadge();renderPinmapNotifications()}catch(_){} }
+async function approveJoinFromNotification(room,userId,approve){
+  try{const {error}=await S.sb.rpc("pinmap_approve_member",{p_room:room,p_user_id:userId,p_approve:!!approve});if(error)throw error;toast(approve?"อนุมัติสมาชิกแล้ว":"ปฏิเสธคำขอแล้ว");await loadPinmapNotifications();if(S.room===room)await pinmapLoadRoomContext()}catch(err){toast(err.message||"ทำรายการไม่สำเร็จ")}
+}
+function openPinmapNotificationDetail(id){const n=pinmapNotifications.find(x=>Number(x.id)===Number(id));if(!n)return;const p=n.payload||{};$("pndBody").textContent=[n.title,n.message,p.description?`\nคำอธิบาย:\n${p.description}`:'',p.recipients?`\nส่งให้: ${Array.isArray(p.recipients)?p.recipients.join(', '):p.recipients}`:''].filter(Boolean).join('\n');$("pndActions").innerHTML=(Number.isFinite(Number(n.lat))&&Number.isFinite(Number(n.lng)))?`<button class="pnt-go" id="pndWarp">วาร์ปไปจุด</button>`:'';if($("pndWarp"))$("pndWarp").onclick=()=>warpToPinmapNotification(id);$("pinmapNotificationDetail").classList.remove("hidden");markPinmapNotificationRead(id)}
+async function warpToPinmapNotification(id){const n=pinmapNotifications.find(x=>Number(x.id)===Number(id));if(!n)return;if(n.room&&n.room!==S.room){const {data,error}=await S.sb.rpc("pinmap_enter_member",{p_room:n.room});if(error||!data)return toast("คุณไม่ได้เป็นสมาชิกห้องนี้แล้ว");await enterRoom(n.room)}map.flyTo([Number(n.lat),Number(n.lng)],Math.max(17,map.getZoom()),{duration:.8});$("pinmapNotificationDetail")?.classList.add("hidden");$("pinmapNotificationPanel")?.classList.add("hidden");pinmapNotificationPanelOpen=false;markPinmapNotificationRead(id)}
+
+function stopPinmapPersonalNotifications(){if(S.notifyCh&&S.sb){try{S.sb.removeChannel(S.notifyCh)}catch(_){}}S.notifyCh=null}
+function startPinmapPersonalNotifications(){
+  stopPinmapPersonalNotifications();if(!S.sb||!S.session)return;const uid=S.session.user.id;
+  S.notifyCh=S.sb.channel(`pinmap-personal-${uid}`)
+    .on("postgres_changes",{event:"*",schema:"public",table:"pinmap_notifications",filter:`user_id=eq.${uid}`},payload=>{loadPinmapNotifications();if(payload.eventType==='INSERT'&&payload.new?.title)toast(payload.new.title)})
+    .on("postgres_changes",{event:"*",schema:"public",table:"pinmap_room_members",filter:`user_id=eq.${uid}`},async payload=>{if(S.room&&(String(payload.old?.room||payload.new?.room||'')===String(S.room))){const {data}=await S.sb.rpc("pinmap_enter_member",{p_room:S.room});if(!data)await pinmapExitRoomLocal("คุณออกจากทีม/ถูกนำออกจากทีมแล้ว");else await pinmapLoadRoomContext()}loadSavedRooms()})
+    .subscribe();
+}
+
+async function openPinmapAssignmentModal(info){
+  if(!S.session)return openAuth("เข้าสู่ระบบก่อน");if(!S.room)return toast("กรุณาเข้าห้องก่อน");
+  const ctx=await pinmapLoadRoomContext();if(!ctx?.is_member)return toast("คุณไม่ได้เป็นสมาชิกห้องนี้");pinmapAssignTarget=info;$("ptaTitle").textContent=`📌 มอบหมาย: ${info.title||'จุด'}`;$("ptaPoint").textContent=`${info.title||''} • ${Number(info.lat).toFixed(6)}, ${Number(info.lng).toFixed(6)}`;$("ptaDescription").value="";const me=S.session.user.id;const members=(ctx.members||[]).filter(m=>m.status==='active'&&String(m.user_id)!==String(me));$("ptaMembers").innerHTML=members.length?members.map(m=>`<label class="pta-user"><input type="checkbox" value="${esc(m.user_id)}"><span>${esc(m.username||'ผู้ใช้')}${m.is_leader?' 👑':''}</span></label>`).join(''):'<div style="font-size:12px;color:#777">ยังไม่มีสมาชิกคนอื่นในห้อง</div>';$("pinmapAssignModal").classList.remove("hidden")
+}
+async function sendPinmapAssignment(){
+  if(!pinmapAssignTarget)return;const ids=[...document.querySelectorAll('#ptaMembers input:checked')].map(x=>x.value);if(!ids.length)return toast("กรุณาเลือกผู้รับอย่างน้อย 1 คน");const d=$("ptaDescription")?.value.trim()||"";const t=pinmapAssignTarget;
+  try{const {error}=await S.sb.rpc("pinmap_create_assignment",{p_room:S.room,p_pin_kind:t.kind||'pin',p_pin_id:String(t.id??''),p_pin_title:t.title||'จุด',p_lat:Number(t.lat),p_lng:Number(t.lng),p_description:d,p_recipient_ids:ids});if(error)throw error;$("pinmapAssignModal").classList.add("hidden");toast(`ส่งมอบหมายให้ ${ids.length} คนแล้ว`);await loadPinmapNotifications()}catch(err){toast(err.message||"ส่งมอบหมายไม่สำเร็จ")}
+}
+
+document.addEventListener("click",e=>{const b=e.target.closest?.(".pinAssignBtn");if(!b)return;e.preventDefault();e.stopPropagation();openPinmapAssignmentModal({kind:b.dataset.kind||'pin',id:b.dataset.id||'',title:b.dataset.title||'จุด',lat:Number(b.dataset.lat),lng:Number(b.dataset.lng)})},true);
+
+
 /* ── ROOM JOIN + PINS LOAD + REALTIME ── */
-const PINMAP_PIN_SELECT = "id,room,lat,lng,title,area,note,created_by,created_by_user_id,color,icon,created_at";
+const PINMAP_PIN_SELECT = "id,room,lat,lng,title,address,area,note,created_by,created_by_user_id,color,icon,created_at";
 let pinmapPinLoadSeq = 0;
+
+// Existing blank addresses are computed locally from lat/lng using the
+// loaded province / amphoe / tambon polygons, then backfilled to Supabase.
+const pinmapAddressBackfilledRooms = new Set();
+
+async function pinmapHydratePinAddresses(rows) {
+  if (!Array.isArray(rows) || !rows.length || !window.pinmapAdminAddressFromLatLng) return rows || [];
+  for (const p of rows) {
+    if (!p || String(p.address || "").trim()) continue;
+    const lat = Number(p.lat), lng = Number(p.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    try {
+      const addr = await window.pinmapAdminAddressFromLatLng(lat, lng);
+      if (addr) p.address = addr;
+    } catch (err) {
+      console.warn("คำนวณ Address ของ pin ไม่สำเร็จ", p?.id, err);
+    }
+  }
+  return rows;
+}
+
+async function pinmapPersistMissingPinAddresses(rows) {
+  if (!S.sb || !S.room || !Array.isArray(rows)) return;
+  const targets = rows.filter(p => p?.id != null && String(p.address || "").trim());
+  let cursor = 0;
+  const workers = Math.min(4, targets.length);
+  async function worker() {
+    while (cursor < targets.length) {
+      const p = targets[cursor++];
+      try {
+        const { error } = await S.sb
+          .from("pins")
+          .update({ address: p.address })
+          .eq("id", p.id)
+          .eq("room", S.room);
+        if (error) console.warn("อัปเดต Address ไม่สำเร็จ", p.id, error);
+      } catch (err) {
+        console.warn("อัปเดต Address ไม่สำเร็จ", p.id, err);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: workers }, worker));
+}
+
+async function pinmapBackfillCurrentRoomAddresses() {
+  if (!S.sb || !S.room || pinmapAddressBackfilledRooms.has(S.room)) return;
+  pinmapAddressBackfilledRooms.add(S.room);
+  try {
+    const rows = await fetchAllPinsRoom();
+    const missing = rows.filter(p => !String(p.address || "").trim());
+    if (!missing.length) return;
+
+    await pinmapHydratePinAddresses(missing);
+    const ready = missing.filter(p => String(p.address || "").trim());
+    if (!ready.length) return;
+
+    await pinmapPersistMissingPinAddresses(ready);
+
+    const byId = new Map(ready.map(p => [String(p.id), p.address]));
+    S.all.forEach(p => {
+      const a = byId.get(String(p.id));
+      if (a) p.address = a;
+    });
+    rebuild();
+    toast(`เติม Address อัตโนมัติแล้ว ${ready.length.toLocaleString("th-TH")} จุด`);
+  } catch (err) {
+    pinmapAddressBackfilledRooms.delete(S.room);
+    console.warn("Backfill Address ไม่สำเร็จ", err);
+  }
+}
 
 function pinmapPinMatchesSearch(p, q) {
   if (!q) return true;
   return (
     String(p?.title || "") + " " +
+    String(p?.address || "") + " " +
     String(p?.area || "") + " " +
     String(p?.note || "")
   ).toLowerCase().includes(String(q).toLowerCase());
@@ -3377,6 +3900,7 @@ async function loadPinsViewport() {
   if (error) { toast(error.message); return; }
 
   S.all = data || [];
+  await pinmapHydratePinAddresses(S.all);
   rebuild();
 }
 
@@ -3401,7 +3925,7 @@ async function loadPinsSearch(queryText) {
       .from("pins")
       .select(PINMAP_PIN_SELECT)
       .eq("room", S.room)
-      .or(`title.ilike.%${q}%,area.ilike.%${q}%,note.ilike.%${q}%`)
+      .or(`title.ilike.%${q}%,address.ilike.%${q}%,area.ilike.%${q}%,note.ilike.%${q}%`)
       .order("created_at", { ascending: true })
       .range(from, from + pageSize - 1);
 
@@ -3414,6 +3938,7 @@ async function loadPinsSearch(queryText) {
 
   if (seq !== pinmapPinLoadSeq) return;
   S.all = all;
+  await pinmapHydratePinAddresses(S.all);
   rebuild();
 }
 
@@ -3467,11 +3992,11 @@ function getOnlineUsers() {
 }
 
 function updateOnlineCount() {
-  const count = getOnlineUsers().size;
-  const el = $("onlineCount");
-  if (el) el.textContent = String(count);
-  const mobileEl = $("mOnlineCount");
-  if (mobileEl) mobileEl.textContent = String(count);
+  // Online status is now shown as a green dot beside each member name.
+  const panel=$("pinmapRoomManager");
+  if(panel && !panel.classList.contains("hidden") && pinmapRoomContext?.members){
+    renderPinmapRoomMembers(pinmapRoomContext.members,!!pinmapRoomContext.is_leader);
+  }
 }
 
 function openOnlineUsers() {
@@ -3494,13 +4019,8 @@ if ($("onlineClose")) $("onlineClose").onclick = closeOnlineUsers;
 if ($("onlineModal")) $("onlineModal").addEventListener("click", e => {
   if (e.target === $("onlineModal")) closeOnlineUsers();
 });
-const onlineButton = document.querySelector(".online");
-if (onlineButton) onlineButton.onclick = openOnlineUsers;
-const mobileOnlineButton = document.querySelector(".m-online");
-if (mobileOnlineButton) mobileOnlineButton.onclick = e => {
-  e.stopPropagation();
-  openOnlineUsers();
-};
+// The old Online buttons are replaced by "สมาชิกในห้อง" during team UI setup.
+
 
 function applyPinRealtimeDelta(payload) {
   const eventType = payload?.eventType;
@@ -3590,11 +4110,26 @@ function subscribeRealtime() {
 }
 
 async function enterRoom(room) {
+  if (!S.session) return openAuth("เข้าสู่ระบบก่อน");
+  try {
+    const { data: allowed, error: memberError } = await S.sb.rpc("pinmap_enter_member", { p_room: room });
+    if (memberError) throw memberError;
+    if (!allowed) return toast("คุณยังไม่ได้รับอนุมัติให้เข้าห้องนี้");
+  } catch (err) {
+    return toast(err.message || "ตรวจสอบสิทธิ์ห้องไม่สำเร็จ");
+  }
   S.room = room;
+  await pinmapTouchRoomMember();
+  await pinmapLoadRoomContext();
   refreshUserUI();
   toast(`เข้าสู่ห้อง: ${room}`);
+  if (pinmapRoomContext?.is_leader && !pinmapRoomContext?.password) {
+    setTimeout(() => { toast("ห้องเดิมยังไม่มีรหัสในระบบหัวห้อง กรุณาตั้งรหัสใหม่ 👑"); openPinmapRoomManager(); }, 350);
+  }
   await loadPins();
+  void pinmapBackfillCurrentRoomAddresses();
   subscribeRealtime();
+  loadPinmapNotifications();
   closeMobileMenu();
 }
 
@@ -3606,16 +4141,32 @@ async function doJoin(roomInputId, passInputId, btnId) {
   if ($(btnId)) $(btnId).disabled = true;
   try {
     if (pass) {
-      const { data, error } = await S.sb.rpc("room_join", { p_room: rm, p_passcode: pass });
+      const { data, error } = await S.sb.rpc("pinmap_request_join", { p_room: rm, p_passcode: pass, p_username: username() });
       if (error) throw error;
-      if (!data) { toast("รหัสห้องไม่ถูกต้อง"); return; }
+      const status = String(data || "");
+      if (status === "created") {
+        toast("สร้างห้องแล้ว คุณเป็นหัวห้องคนแรก 👑");
+        await enterRoom(rm);
+      } else if (status === "joined") {
+        await enterRoom(rm);
+      } else if (status === "pending") {
+        toast("ส่งคำขอเข้าห้องแล้ว รอหัวห้องกดยอมรับ");
+        await loadPinmapNotifications();
+      } else if (status === "wrong_password") {
+        toast("รหัสห้องไม่ถูกต้อง");
+      } else if (status === "password_not_set") {
+        toast("ห้องเดิมนี้ยังไม่ได้ตั้งรหัสใหม่ กรุณาให้หัวห้องตั้งรหัสก่อน");
+      } else {
+        toast("ไม่สามารถเข้าห้องได้");
+      }
     } else {
-      const { data, error } = await S.sb.rpc("room_enter_saved", { p_room: rm });
+      const { data, error } = await S.sb.rpc("pinmap_enter_member", { p_room: rm });
       if (error) throw error;
-      if (!data) { toast("ต้องใส่รหัสห้องสำหรับการเข้าห้องครั้งแรก"); return; }
+      if (!data) { toast("ต้องใส่รหัสห้อง หรือรอหัวห้องอนุมัติก่อน"); return; }
+      await enterRoom(rm);
     }
-    await enterRoom(rm);
-    if ($(passInputId)) $(passInputId).value = "";
+    if ($(passInputId) && S.room === rm) $(passInputId).value = "";
+    await loadSavedRooms();
   } catch (err) {
     toast(err.message || "เข้าห้องไม่สำเร็จ");
   } finally {
@@ -4832,6 +5383,16 @@ function startCompetitorRealtime() {
 function onAuthReady() {
   refreshUserUI();
   loadSavedRooms();
+  if (S.session) {
+    startSavedRoomsRealtime();
+    startPinmapPersonalNotifications();
+    loadPinmapNotifications();
+  } else {
+    stopSavedRoomsRealtime();
+    stopPinmapPersonalNotifications();
+    pinmapNotifications = [];
+    pinmapRenderNotifyBadge();
+  }
 }
 
 
@@ -4850,6 +5411,9 @@ function pinmapApplyPointCap() {
     if (map.hasLayer(cluster)) map.removeLayer(cluster);
     if (map.hasLayer(s11Cluster)) map.removeLayer(s11Cluster);
     if (map.hasLayer(cjCluster)) map.removeLayer(cjCluster);
+    if (typeof PINMAP_EXTRA_COMPETITORS !== "undefined") {
+      for (const st of PINMAP_EXTRA_COMPETITORS.values()) if (map.hasLayer(st.layer)) map.removeLayer(st.layer);
+    }
     return;
   }
   if (!map.hasLayer(cluster)) cluster.addTo(map);
@@ -4926,6 +5490,7 @@ function pinmapApplyPointCap() {
   if (!selectedS11.length && map.hasLayer(s11Cluster)) map.removeLayer(s11Cluster);
   if (selectedCJ.length && !map.hasLayer(cjCluster)) cjCluster.addTo(map);
   if (!selectedCJ.length && map.hasLayer(cjCluster)) map.removeLayer(cjCluster);
+  if (typeof pinmapExtraRender === "function") pinmapExtraRender();
 }
 
 let pinmapViewportTimer = null;
@@ -4962,6 +5527,7 @@ async function init() {
 
       // Load competitor data in the background; do not block login/UI startup.
       void loadCompetitorDataFromSupabase();
+      void pinmapLoadExtraCompetitors();
       startCompetitorRealtime();
     } catch (e) {
       console.warn("Supabase Config Issue:", e);
@@ -4986,3 +5552,375 @@ async function init() {
   }
 }
 init();
+
+
+(function pinmapMobileCompetitorPosition(){
+  const st = document.createElement("style");
+  st.id = "pinmapMobileCompetitorPosition";
+  st.textContent = `
+/* Mobile competitor panel: vertically centered lower on screen */
+@media (max-width: 768px) {
+  #mCompetitorPanel {
+    top: 50% !important;
+    bottom: auto !important;
+    transform: translateY(-42%) !important;
+    max-height: 72vh !important;
+    overflow-y: auto !important;
+  }
+}
+`;
+  document.head.appendChild(st);
+})();
+
+
+(function pinmapSavedRoomDeleteFeature(){
+  const LONG_PRESS_MS = 650;
+  let longPressTimer = null;
+  let longPressTriggered = false;
+
+  function getSavedRoomElement(target){
+    if(!(target instanceof Element)) return null;
+    return target.closest(".savedRoomBtn,[data-saved-room]");
+  }
+
+  function roomNameFromElement(el){
+    if(!el) return "";
+    return String(
+      el.dataset?.room ||
+      el.dataset?.savedRoom ||
+      el.getAttribute("data-room") ||
+      el.getAttribute("data-saved-room") ||
+      ""
+    ).trim();
+  }
+
+  async function deleteSavedRoomByName(roomName){
+    roomName = String(roomName || "").trim();
+    if(!roomName || !S.sb || !S.session) return false;
+
+    try{
+      const { error } = await S.sb
+        .from("saved_rooms")
+        .delete()
+        .eq("user_id", S.session.user.id)
+        .eq("room", roomName);
+
+      if(error) throw error;
+
+      S.savedRooms = (S.savedRooms || []).filter(r => String(r.room) !== roomName);
+      renderSavedRooms();
+      toast(`ลบ "${roomName}" ออกจากห้องที่บันทึกไว้แล้ว`);
+      return true;
+    }catch(err){
+      console.warn("delete saved room", err);
+      toast(err.message || "ลบห้องที่บันทึกไว้ไม่สำเร็จ");
+      return false;
+    }
+  }
+
+  async function confirmDelete(roomName){
+    const ok = window.confirm(
+      `ลบห้อง "${roomName}" ออกจากรายการที่บันทึกไว้ใช่ไหม?\n\n` +
+      `รายการนี้จะหายจากทุกเครื่องที่ล็อกอินบัญชีเดียวกัน\n` +
+      `แต่ห้องจริง สมาชิก Pins และข้อมูลใน Supabase จะไม่ถูกลบ`
+    );
+    if(ok) await deleteSavedRoomByName(roomName);
+  }
+
+  // Desktop: right-click a saved room.
+  document.addEventListener("contextmenu", e => {
+    const el = getSavedRoomElement(e.target);
+    if(!el) return;
+    const roomName = roomNameFromElement(el);
+    if(!roomName) return;
+    e.preventDefault();
+    confirmDelete(roomName);
+  }, true);
+
+  // Mobile: long-press a saved room.
+  document.addEventListener("touchstart", e => {
+    const el = getSavedRoomElement(e.target);
+    if(!el) return;
+    const roomName = roomNameFromElement(el);
+    if(!roomName) return;
+
+    longPressTriggered = false;
+    clearTimeout(longPressTimer);
+    longPressTimer = setTimeout(() => {
+      longPressTriggered = true;
+      try{ navigator.vibrate?.(30); }catch(_){}
+      confirmDelete(roomName);
+    }, LONG_PRESS_MS);
+  }, {passive:true, capture:true});
+
+  ["touchend","touchcancel","touchmove"].forEach(type => {
+    document.addEventListener(type, () => {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }, {passive:true, capture:true});
+  });
+
+  document.addEventListener("click", e => {
+    if(longPressTriggered && getSavedRoomElement(e.target)){
+      e.preventDefault();
+      e.stopPropagation();
+      longPressTriggered = false;
+    }
+  }, true);
+
+  window.pinmapDeleteSavedRoom = deleteSavedRoomByName;
+})();
+
+
+(function pinmapCenterMembersDialog(){
+  const st = document.createElement("style");
+  st.id = "pinmapCenterMembersDialog";
+  st.textContent = `
+/* สมาชิกในห้อง: อยู่กลางหน้าจอและย่อ/ขยายตาม viewport */
+#pinmapRoomManager{
+  position:fixed !important;
+  left:50% !important;
+  top:50% !important;
+  right:auto !important;
+  bottom:auto !important;
+  transform:translate(-50%,-50%) !important;
+  width:min(620px, calc(100vw - 32px)) !important;
+  max-width:calc(100vw - 32px) !important;
+  max-height:calc(100dvh - 32px) !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  box-sizing:border-box !important;
+  margin:0 !important;
+  z-index:10050 !important;
+}
+
+#pinmapRoomManager .ptm-members{
+  max-height:min(52vh, 460px) !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+}
+
+@media (max-width: 768px){
+  #pinmapRoomManager{
+    width:calc(100vw - 20px) !important;
+    max-width:calc(100vw - 20px) !important;
+    max-height:calc(100dvh - 20px) !important;
+    border-radius:14px !important;
+  }
+  #pinmapRoomManager .ptm-members{
+    max-height:48dvh !important;
+  }
+}
+
+@media (max-width: 420px){
+  #pinmapRoomManager{
+    width:calc(100vw - 12px) !important;
+    max-width:calc(100vw - 12px) !important;
+    max-height:calc(100dvh - 12px) !important;
+  }
+  #pinmapRoomManager .ptm-member{
+    grid-template-columns:1fr !important;
+    gap:7px !important;
+  }
+  #pinmapRoomManager .ptm-actions{
+    display:flex !important;
+    flex-wrap:wrap !important;
+    gap:5px !important;
+  }
+}
+`;
+  document.head.appendChild(st);
+
+  // ถ้ามีการ resize/zoom ขณะเปิดอยู่ ให้ browser คำนวณตำแหน่งใหม่ทันที
+  const keepCentered = () => {
+    const el = document.getElementById("pinmapRoomManager");
+    if(!el || el.classList.contains("hidden")) return;
+    el.style.left = "50%";
+    el.style.top = "50%";
+    el.style.transform = "translate(-50%,-50%)";
+  };
+  window.addEventListener("resize", keepCentered, {passive:true});
+  if(window.visualViewport){
+    window.visualViewport.addEventListener("resize", keepCentered, {passive:true});
+    window.visualViewport.addEventListener("scroll", keepCentered, {passive:true});
+  }
+})();
+
+
+(function pinmapResponsiveDesktopHeaderFix(){
+  const st=document.createElement('style');
+  st.id='pinmapResponsiveDesktopHeaderFix';
+  st.textContent=`
+/* Header desktop: ให้ปุ่มไหลลงบรรทัดใหม่ตามพื้นที่จริงของหน้าจอ/Browser Zoom */
+@media (min-width:769px){
+  .pinmap-header-row{
+    display:flex !important;
+    align-items:center !important;
+    align-content:center !important;
+    justify-content:flex-start !important;
+    gap:6px !important;
+    row-gap:6px !important;
+    flex-wrap:wrap !important;
+    box-sizing:border-box !important;
+    width:calc(100% - 24px) !important;
+    max-width:calc(100% - 24px) !important;
+    height:auto !important;
+    min-height:52px !important;
+    padding:8px 12px !important;
+    overflow:visible !important;
+  }
+
+  .pinmap-header-row > *{
+    flex:0 0 auto !important;
+    min-width:0 !important;
+    box-sizing:border-box !important;
+  }
+
+  .pinmap-header-row button,
+  .pinmap-header-row input,
+  #pinmapMembersBtn,#pinmapNotifyBtn,#leaveTeamBtn{
+    height:36px !important;
+    min-height:36px !important;
+    max-height:36px !important;
+    padding:0 9px !important;
+    margin:0 !important;
+    font-size:12px !important;
+    line-height:1 !important;
+    display:inline-flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    vertical-align:middle !important;
+    white-space:nowrap !important;
+    border-radius:8px !important;
+    box-sizing:border-box !important;
+  }
+
+  /* สมาชิกและแจ้งเตือนสูง/แนวเดียวกันเสมอ */
+  #pinmapMembersBtn,#pinmapNotifyBtn{
+    align-self:center !important;
+    transform:none !important;
+    position:relative !important;
+    top:auto !important;
+    bottom:auto !important;
+    height:36px !important;
+    min-height:36px !important;
+    max-height:36px !important;
+  }
+
+  /* ไม่มีปุ่มหัวห้องแยกบน header */
+  #pinmapLeaderBtn,#mPinmapLeaderBtn{
+    display:none !important;
+  }
+
+  #room{
+    width:150px !important;
+    max-width:min(150px,24vw) !important;
+  }
+  #passcode{
+    width:155px !important;
+    max-width:min(155px,25vw) !important;
+  }
+  #userLabel{
+    max-width:145px !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+    white-space:nowrap !important;
+    font-size:12px !important;
+  }
+}
+
+/* เมื่อ Zoom 125% หรือพื้นที่แนวนอนลดลง ให้ย่อเล็กน้อย แต่ "ไม่ซ่อน" ปุ่ม */
+@media (min-width:769px) and (max-width:1380px){
+  .pinmap-header-row{
+    gap:5px !important;
+    row-gap:5px !important;
+    padding:7px 9px !important;
+    width:calc(100% - 18px) !important;
+    max-width:calc(100% - 18px) !important;
+  }
+
+  .pinmap-header-row button,
+  .pinmap-header-row input,
+  #pinmapMembersBtn,#pinmapNotifyBtn,#leaveTeamBtn{
+    height:34px !important;
+    min-height:34px !important;
+    max-height:34px !important;
+    padding-left:7px !important;
+    padding-right:7px !important;
+    font-size:11px !important;
+  }
+
+  #pinmapMembersBtn,#pinmapNotifyBtn{
+    height:34px !important;
+    min-height:34px !important;
+    max-height:34px !important;
+  }
+
+  #room{width:132px !important;max-width:132px !important;}
+  #passcode{width:140px !important;max-width:140px !important;}
+  #userLabel{max-width:112px !important;font-size:11px !important;}
+}
+
+/* แคบกว่านี้: ปุ่มจะย้ายลงแถว 2/3 อัตโนมัติ แทนการหายหรือทับกัน */
+@media (min-width:769px) and (max-width:1100px){
+  .pinmap-header-row{
+    gap:4px !important;
+    row-gap:5px !important;
+    padding:6px 8px !important;
+  }
+
+  .pinmap-header-row button,
+  .pinmap-header-row input,
+  #pinmapMembersBtn,#pinmapNotifyBtn,#leaveTeamBtn{
+    padding-left:6px !important;
+    padding-right:6px !important;
+    font-size:10.5px !important;
+  }
+
+  #room{width:118px !important;max-width:118px !important;}
+  #passcode{width:122px !important;max-width:122px !important;}
+  #userLabel{max-width:95px !important;font-size:10.5px !important;}
+}
+
+/* มือถือใช้ UI มือถือเดิม และซ่อนปุ่มหัวห้องแยก */
+@media (max-width:768px){
+  #pinmapLeaderBtn,#mPinmapLeaderBtn{display:none !important;}
+}
+`;
+  document.head.appendChild(st);
+
+  function commonParent(nodes){
+    const valid=nodes.filter(Boolean);
+    if(!valid.length)return null;
+    let p=valid[0].parentElement;
+    while(p && p!==document.body){
+      if(valid.every(n=>p.contains(n))) return p;
+      p=p.parentElement;
+    }
+    return null;
+  }
+
+  function apply(){
+    const row=commonParent([
+      document.getElementById('room'),
+      document.getElementById('join'),
+      document.getElementById('logoutBtn'),
+      document.getElementById('pinmapMembersBtn'),
+      document.getElementById('pinmapNotifyBtn')
+    ]);
+    if(row) row.classList.add('pinmap-header-row');
+
+    // ถ้ามีปุ่มหัวห้องจาก cache/ไฟล์เก่า ให้เอาออกจาก DOM
+    document.getElementById('pinmapLeaderBtn')?.remove();
+    document.getElementById('mPinmapLeaderBtn')?.remove();
+  }
+
+  apply();
+  window.addEventListener('resize',apply,{passive:true});
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize',apply,{passive:true});
+  }
+  setTimeout(apply,100);
+  setTimeout(apply,500);
+})();
+
